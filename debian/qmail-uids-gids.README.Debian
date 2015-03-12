@@ -1,0 +1,25 @@
+qmail-uids-gids for Debian
+--------------------------
+
+This package ensures that the following users and groups are installed on
+this system:
+
+/etc/passwd:
+alias:x:64010:65534:qmail alias:/var/lib/qmail/alias:/bin/sh
+qmaild:x:64011:65534:qmail daemon:/var/lib/qmail:/bin/sh
+qmails:x:64012:64010:qmail send:/var/lib/qmail:/bin/sh
+qmailr:x:64013:64010:qmail remote:/var/lib/qmail:/bin/sh
+qmailq:x:64014:64010:qmail queue:/var/lib/qmail:/bin/sh
+qmaill:x:64015:65534:qmail log:/var/lib/qmail:/bin/sh
+qmailp:x:64016:65534:qmail pw:/var/lib/qmail:/bin/sh
+
+/etc/group:
+qmail:x:64010:
+nofiles:x:65534:
+
+These uids and gids are mandatory for building and running qmail.  Do not
+change them while this package is installed.
+
+Uninstalling this package will not remove these uids and gids.
+
+ -- Gerrit Pape <pape@smarden.org>, Mon, 18 Dec 2000 14:32:38 +0100

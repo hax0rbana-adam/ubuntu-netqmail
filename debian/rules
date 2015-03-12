@@ -1,0 +1,114 @@
+#!/usr/bin/make -f
+
+STRIP =strip
+ifneq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+  STRIP =: nostrip
+endif
+
+DIR=$(shell pwd)/debian/qmail
+
+patch: deb-checkdir patch-stamp
+patch-stamp:
+	for i in `ls -1 debian/diff/*.diff || :`; do \
+	  patch -p1 <$$i || exit 1; \
+	done
+	touch patch-stamp
+
+build: deb-checkdir build-stamp
+build-stamp: patch-stamp
+	test -r conf-qmail'{orig}' || cp conf-qmail conf-qmail'{orig}'
+	echo /var/lib/qmail >conf-qmail
+	$(MAKE) it man
+	touch build-stamp
+
+clean: deb-checkdir deb-checkuid
+	$(MAKE) clean
+	test ! -r conf-qmail'{orig}' || mv -f conf-qmail'{orig}' conf-qmail
+	test ! -e patch-stamp || \
+	  for i in `ls -1r debian/diff/*.diff || :`; do patch -p1 -R <$$i; done
+	rm -f build-stamp patch-stamp
+	rm -rf '$(DIR)' '$(DIR)'-uids-gids
+	rm -f debian/files debian/substvars changelog
+
+install: install-arch install-indep
+install-arch: deb-checkdir deb-checkuid build-stamp
+	rm -rf '$(DIR)'
+	install -d -m0755 '$(DIR)'/var/lib/qmail
+	test -r conf-qmail'{orig}' || cp conf-qmail conf-qmail'{orig}'
+	echo '$(DIR)'/var/lib/qmail >conf-qmail
+	rm -f auto_qmail.[co]
+	sleep 1
+	$(MAKE) install instcheck
+	./install
+	./instcheck
+	for i in bouncesaying condredirect except forward maildir2mbox \
+	 maildirmake maildirwatch predate preline qbiff qmail-clean \
+	 qmail-getpw qmail-inject qmail-local qmail-lspawn qmail-newmrh \
+	 qmail-newu qmail-pop3d qmail-popup qmail-pw2u qmail-qmqpc \
+	 qmail-qmqpd qmail-qmtpd qmail-qread qmail-queue qmail-remote \
+	 qmail-rspawn qmail-send qmail-showctl qmail-smtpd qmail-start \
+	 qmail-tcpok qmail-tcpto qreceipt qsmhook sendmail splogger tcp-env; \
+	  do $(STRIP) -R .comment -R .note '$(DIR)'/var/lib/qmail/bin/$$i \
+	    || exit 1; \
+	done
+	install -d -m0755 '$(DIR)'/usr/bin
+	install -d -m0755 '$(DIR)'/usr/sbin
+	install -d -m0755 '$(DIR)'/etc/qmail
+	install -d -m0755 '$(DIR)'/usr/lib/qmail/bin
+	install -m0755 config-fast '$(DIR)'/usr/lib/qmail/bin/config-fast
+	# move and link binaries
+	for i in bin sbin; do \
+	  for j in `cat debian/$${i}`; do \
+	    mv -f '$(DIR)'/var/lib/qmail/bin/$${j} '$(DIR)'/usr/$${i}/$${j} && \
+	    ln -s /usr/$${i}/$${j} '$(DIR)'/var/lib/qmail/bin/$${j} || exit 1; \
+	  done; \
+	done;
+	mv -f '$(DIR)'/var/lib/qmail/bin/sendmail '$(DIR)'/usr/sbin/qmail-sendmail
+	ln -s /usr/sbin/qmail-sendmail '$(DIR)'/var/lib/qmail/bin/sendmail
+	# docs are in /usr/share/doc/qmail (implicit)
+	rm -rf '$(DIR)'/var/lib/qmail/doc
+	ln -s /usr/share/doc/qmail '$(DIR)'/var/lib/qmail/doc
+	# place users/ into /etc/qmail/, link back
+	mv '$(DIR)'/var/lib/qmail/users '$(DIR)'/etc/qmail/
+	ln -s /etc/qmail/users '$(DIR)'/var/lib/qmail/users
+	# place boot/ into /usr/lib/qmail/, link back
+	mv '$(DIR)'/var/lib/qmail/boot '$(DIR)'/usr/lib/qmail/
+	ln -s /usr/lib/qmail/boot '$(DIR)'/var/lib/qmail/boot
+	# control/ is /etc/qmail/
+	rmdir '$(DIR)'/var/lib/qmail/control
+	ln -s /etc/qmail '$(DIR)'/var/lib/qmail/control
+	# policy 10.6, create named pipe in postinst, remove in postrm
+	rm -f '$(DIR)'/var/lib/qmail/queue/lock/trigger
+	# man pages system-wide
+	rm -rf '$(DIR)'/var/lib/qmail/man
+	for i in 1 3 5 7 8; do \
+	  install -d -m0755 '$(DIR)'/usr/share/man/man$$i && \
+	  for j in *.$$i; do \
+	    install -m0644 $$j '$(DIR)'/usr/share/man/man$$i/ || exit 1; \
+	  done || exit 1; \
+	done
+	for i in cdb.3 error.3 mbox.5; do \
+	  mv '$(DIR)'/usr/share/man/man$${i##*.}/$$i \
+	    '$(DIR)'/usr/share/man/man$${i##*.}/$${i}qmail || exit 1; \
+	done
+	gzip -9 '$(DIR)'/usr/share/man/man?/*
+	# changelog
+	rm -f changelog && ln -s CHANGES changelog
+install-indep: deb-checkdir deb-checkuid
+	# qmail-uids-gids
+	rm -rf '$(DIR)'-uids-gids
+	install -d -m0755 '$(DIR)'-uids-gids
+	rm -f changelog && ln -s CHANGES changelog
+
+binary: binary-indep binary-arch
+binary-arch: install-arch qmail.deb
+	dpkg-shlibdeps '$(DIR)'/usr/bin/* '$(DIR)'/usr/sbin/*
+	dpkg-gencontrol -isp -pqmail -P'$(DIR)'
+	dpkg -b '$(DIR)' ..
+binary-indep: install-indep qmail-uids-gids.deb
+	dpkg-gencontrol -isp -pqmail-uids-gids -P'$(DIR)'-uids-gids
+	dpkg -b '$(DIR)'-uids-gids ..
+
+.PHONY: patch build clean install binary-indep binary-arch binary
+
+include debian/implicit

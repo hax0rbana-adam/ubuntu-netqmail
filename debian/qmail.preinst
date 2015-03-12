@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+errcho() {
+  echo "$*" >&2
+}
+
+if test "$1" = upgrade && dpkg --compare-versions "$2" lt 1.06; then
+  case "$2" in
+  *zarge*)
+    if test -x /usr/lib/qmail/prepare-upgrade-from-unofficial; then
+      /usr/lib/qmail/prepare-upgrade-from-unofficial
+    else
+      errcho "Upgrading from qmail version $2 is not yet supported."
+      exit 1
+    fi
+    ;;
+  *)
+    if test -x /usr/lib/qmail/prepare-upgrade-from-nonfree; then
+      /var/usr/qmail/prepare-upgrade-from-nonfree
+    else
+      errcho "Upgrading from qmail version $2 is not yet supported."
+      exit 1
+    fi
+    ;;
+  esac
+fi

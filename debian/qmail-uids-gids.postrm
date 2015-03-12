@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+test "$1" = 'purge' || exit 0
+
+cat <<EOT
+
+Attention:
+
+Purging this package does not remove the qmail uids and gids.  You might
+want to do this manually, e.g.:
+
+# userdel alias
+# userdel qmaild
+# userdel qmaill
+# userdel qmailp
+# userdel qmailq
+# userdel qmailr
+# userdel qmails
+# groupdel qmail
+# groupdel nofiles
+
+EOT

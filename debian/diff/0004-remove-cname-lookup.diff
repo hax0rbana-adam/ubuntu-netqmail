@@ -1,0 +1,38 @@
+diff --git a/dns.c b/dns.c
+index e9faad7..9ed3f32 100644
+--- a/dns.c
++++ b/dns.c
+@@ -187,32 +187,7 @@ int flagsearch;
+ int dns_cname(sa)
+ stralloc *sa;
+ {
+- int r;
+- int loop;
+- for (loop = 0;loop < 10;++loop)
+-  {
+-   if (!sa->len) return loop;
+-   if (sa->s[sa->len - 1] == ']') return loop;
+-   if (sa->s[sa->len - 1] == '.') { --sa->len; continue; }
+-   switch(resolve(sa,T_ANY))
+-    {
+-     case DNS_MEM: return DNS_MEM;
+-     case DNS_SOFT: return DNS_SOFT;
+-     case DNS_HARD: return loop;
+-     default:
+-       while ((r = findname(T_CNAME)) != 2)
+-	{
+-	 if (r == DNS_SOFT) return DNS_SOFT;
+-	 if (r == 1)
+-	  {
+-	   if (!stralloc_copys(sa,name)) return DNS_MEM;
+-	   break;
+-	  }
+-	}
+-       if (r == 2) return loop;
+-    }
+-  }
+- return DNS_HARD; /* alias loop */
++  return 0;
+ }
+ 
+ #define FMT_IAA 40

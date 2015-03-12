@@ -1,0 +1,58 @@
+#!/bin/sh
+set -e
+
+stopinst() {
+  cat <<-\EOT >&2
+	
+	The hostname -f command returned: $1
+	
+	Your system needs to have a fully qualified domain name (fqdn) in
+	order to install the var-qmail packages.
+	
+	Installation aborted.
+	
+	EOT
+  exit 1
+}
+config() {
+  HN="`hostname -f 2>&1`" || stopinst "$HN"
+  echo "$HN" |grep -F . >/dev/null || stopinst "$HN"
+  /usr/lib/qmail/bin/config-fast "$HN"
+}
+
+test "$1" = 'configure' || exit 0
+
+# policy 10.6: create named pipe not included in the package
+if test ! -p /var/lib/qmail/queue/lock/trigger; then
+  rm -f /var/lib/qmail/queue/lock/trigger
+  mkfifo -m0622 /var/lib/qmail/queue/lock/trigger
+  chown qmails:qmail /var/lib/qmail/queue/lock/trigger
+fi
+
+if test -f /var/lib/qmail/control/me; then
+  cat <<-\EOT
+	You already have a '/var/lib/qmail/control/me', assuming that
+	qmail on your system is already configured.
+	EOT
+else
+  config
+fi
+
+test -n "$2" || exit 0
+
+# upgrading
+if test ! -x /usr/sbin/update-service; then
+  cat <<-\EOT
+	The update-service program is not available, assuming no qmail
+	services need to be restarted.
+	EOT
+  exit 0
+fi
+if update-service --check qmail-send; then
+  echo 'Restarting qmail-send...'
+  svc -t /etc/service/qmail-send
+fi
+if update-service --check qmail-verify; then 
+  echo 'Restarting qmail-verify...'
+  svc -t /etc/service/qmail-verify
+fi

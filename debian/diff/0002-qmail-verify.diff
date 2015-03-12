@@ -1,0 +1,1273 @@
+From f035d0b17145b78ae5490eb3d95ac72de188ae65 Mon Sep 17 00:00:00 2001
+From: Gerrit Pape <pape@smarden.org>
+Date: Thu, 4 Mar 2010 22:33:00 +0000
+Subject: [PATCH 2/3] qmail-verify
+
+This patchset adds a feature to qmail-smtpd's behaviour, enabled by an
+environment variable: Each recipient specified in the SMTP session (RCPT
+command) may be verified to see if it is a valid address on the system. A
+new daemon, qmail-verify is used by qmail-smtpd to determine if addresses
+are valid; qmail-smtpd communicates with qmail-verify using UDP.
+
+Patch is from Andrew Richards
+http://free.acrconsulting.co.uk/sw/qv/qmail-verify_v1.32.patch
+http://free.acrconsulting.co.uk/email/qmail-verify.html
+
+  "
+Security
+
+Here are some notes relating to security with this patchset, these notes
+are unlikely to be exhaustive:
+
+It is conceivable that an attacker or spammer could abuse a system patched
+using this patchset to mount dictionary attacks. To vary how a
+qmail-verify patched system responds, you should make sure you understand
+the difference between immediate and DEFERred recipient verification and
+set your system appropriately. Immediate verification is likely to be more
+attractive to an attacker/spammer.
+
+On the other hand, with this patchset you have a greater degree of
+certainty that messages in the queue for local users are destined for real
+mailboxes.
+
+This patchset deliberately splits the functionality of the original
+realrcptto patch such that the address verification part runs as a
+separate daemon, qmail-verify (running as root), with qmail-smtpd still
+able to run as user qmaild. This also means that the changes to
+qmail-smtpd are minimal.
+
+There is no attempt made to check that the replies to the queries to
+qmail-verify are genuine: It is conceivable that an attacker might wish to
+generate spoof UDP replies to tell qmail-smtpd that an address is valid.
+For this to occur, the attacker would either need to be a 'local' user to
+generate such 'replies' on the loopback interface (default configuration),
+or qmail-verify would need to be running on an external interface. In the
+latter case it should be possible to block the qmail-verify port at a
+firewall.
+
+All that said however, such an attack is of limited use, since qmail will
+still bounce the message at delivery time for an invalid recipient.
+  "
+---
+ Makefile       |   59 +++++++-
+ TARGETS        |    7 +
+ hier.c         |    3 +
+ qmail-smtpd.8  |   63 ++++++++-
+ qmail-smtpd.c  |   49 +++++++
+ qmail-verify.8 |  136 +++++++++++++++++
+ qmail-verify.c |  438 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ qmail-verify.h |   34 +++++
+ scan.h         |    3 +
+ scan_misc.c    |   39 +++++
+ sockbits.c     |   31 ++++
+ sockbits.h     |    1 +
+ udpbits.c      |   24 +++
+ udpbits.h      |    1 +
+ verifyrcpt.c   |   45 ++++++
+ verifyrcpt.h   |    3 +
+ 16 files changed, 932 insertions(+), 4 deletions(-)
+ create mode 100644 qmail-verify.8
+ create mode 100644 qmail-verify.c
+ create mode 100644 qmail-verify.h
+ create mode 100644 scan_misc.c
+ create mode 100644 sockbits.c
+ create mode 100644 sockbits.h
+ create mode 100644 udpbits.c
+ create mode 100644 udpbits.h
+ create mode 100644 verifyrcpt.c
+ create mode 100644 verifyrcpt.h
+
+diff --git a/Makefile b/Makefile
+index a27a809..69d401d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -812,7 +812,7 @@ dnsptr dnsip dnsmxip dnsfq hostname ipmeprint qreceipt qsmhook qbiff \
+ forward preline condredirect bouncesaying except maildirmake \
+ maildir2mbox maildirwatch qail elq pinq idedit install-big install \
+ instcheck home home+df proc proc+df binm1 binm1+df binm2 binm2+df \
+-binm3 binm3+df
++binm3 binm3+df qmail-verify
+ 
+ load: \
+ make-load warn-auto.sh systype
+@@ -939,7 +939,7 @@ preline.0 condredirect.0 bouncesaying.0 except.0 maildirmake.0 \
+ maildir2mbox.0 maildirwatch.0 qmail.0 qmail-limits.0 qmail-log.0 \
+ qmail-control.0 qmail-header.0 qmail-users.0 dot-qmail.0 \
+ qmail-command.0 tcp-environ.0 maildir.0 mbox.0 addresses.0 \
+-envelopes.0 forgeries.0
++envelopes.0 forgeries.0 qmail-verify.0
+ 
+ mbox.0: \
+ mbox.5
+@@ -1537,14 +1537,19 @@ auto_split.h
+ 
+ qmail-smtpd: \
+ load qmail-smtpd.o rcpthosts.o commands.o timeoutread.o \
++sockbits.o udpbits.o verifyrcpt.o \
+ timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o received.o \
+-date822fmt.o now.o qmail.o cdb.a fd.a wait.a datetime.a getln.a \
++date822fmt.o now.o qmail.o cdb.a fd.a wait.a \
++scan_misc.o \
++datetime.a getln.a \
+ open.a sig.a case.a env.a stralloc.a errbits.o \
+ alloc.a substdio.a error.a str.a \
+ fs.a auto_qmail.o socket.lib
+ 	./load qmail-smtpd rcpthosts.o commands.o timeoutread.o \
++	sockbits.o udpbits.o verifyrcpt.o \
+ 	timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o \
+ 	received.o date822fmt.o now.o qmail.o cdb.a fd.a wait.a \
++	scan_misc.o \
+ 	datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
+ 	errbits.o \
+ 	alloc.a substdio.a error.a str.a fs.a auto_qmail.o  `cat \
+@@ -1559,6 +1564,7 @@ compile qmail-smtpd.c sig.h readwrite.h stralloc.h gen_alloc.h \
+ substdio.h alloc.h auto_qmail.h control.h received.h constmap.h \
+ error.h ipme.h ip.h ipalloc.h ip.h gen_alloc.h ip.h qmail.h \
+ substdio.h str.h fmt.h scan.h byte.h case.h env.h now.h datetime.h \
++sockbits.h udpbits.h qmail-verify.h \
+ exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h
+ 	./compile qmail-smtpd.c
+ 
+@@ -1633,6 +1639,31 @@ qmail-users.9 conf-break conf-spawn
+ 	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
+ 	> qmail-users.5
+ 
++qmail-verify.o: \
++qmail-verify.h compile qmail-verify.c auto_break.h auto_usera.h auto_qmail.h byte.h case.h cdb.h \
++constmap.h error.h fmt.h ip.h open.h str.h stralloc.h uint32.h errbits.h
++	./compile qmail-verify.c
++
++qmail-verify: \
++load qmail-verify.o timeoutread.o \
++timeoutwrite.o control.o ip.o constmap.o \
++cdb.a fd.a wait.a getln.a \
++open.a sig.a case.a env.a stralloc.a \
++auto_usera.o auto_break.o auto_qmail.o errbits.o \
++alloc.a substdio.a error.a str.a fs.a \
++socket.lib
++	./load qmail-verify timeoutread.o \
++	timeoutwrite.o control.o ip.o constmap.o \
++	cdb.a fd.a wait.a \
++	getln.a open.a sig.a case.a env.a stralloc.a \
++	auto_usera.o auto_break.o auto_qmail.o errbits.o \
++	alloc.a substdio.a error.a str.a fs.a `cat \
++	socket.lib`
++
++qmail-verify.0: \
++qmail-verify.8
++	nroff -man qmail-verify.8 > qmail-verify.0
++
+ qmail.0: \
+ qmail.7
+ 	nroff -man qmail.7 > qmail.0
+@@ -1706,6 +1737,10 @@ scan_8long.o: \
+ compile scan_8long.c scan.h
+ 	./compile scan_8long.c
+ 
++scan_misc.o: \
++compile scan_misc.c scan.h
++	./compile scan_misc.c
++
+ scan_ulong.o: \
+ compile scan_ulong.c scan.h
+ 	./compile scan_ulong.c
+@@ -1777,6 +1812,7 @@ qmail-lspawn.8 qmail-newmrh.9 qmail-newu.9 qmail-pop3d.8 \
+ qmail-popup.8 qmail-pw2u.9 qmail-qmqpc.8 qmail-qmqpd.8 qmail-qmtpd.8 \
+ qmail-qread.8 qmail-qstat.8 qmail-queue.8 qmail-remote.8 \
+ qmail-rspawn.8 qmail-send.9 qmail-showctl.8 qmail-smtpd.8 \
++qmail-verify.8 \
+ qmail-start.9 qmail-tcpok.8 qmail-tcpto.8 qmail-users.9 qmail.7 \
+ qreceipt.1 splogger.8 tcp-env.1 config.sh config-fast.sh \
+ qmail-clean.c qmail-getpw.c qmail-inject.c qmail-local.c \
+@@ -1889,6 +1925,10 @@ compile slurpclose.c stralloc.h gen_alloc.h readwrite.h slurpclose.h \
+ error.h
+ 	./compile slurpclose.c
+ 
++sockbits.o: \
++compile sockbits.c sockbits.h stralloc.h gen_alloc.h
++	./compile sockbits.c
++
+ socket.lib: \
+ trylsock.c compile load
+ 	( ( ./compile trylsock.c && \
+@@ -2127,6 +2167,10 @@ triggerpull.o: \
+ compile triggerpull.c ndelay.h open.h triggerpull.h
+ 	./compile triggerpull.c
+ 
++udpbits.o: \
++compile udpbits.c udpbits.h ip.h
++	./compile udpbits.c
++
+ uint32.h: \
+ tryulong32.c compile load uint32.h1 uint32.h2
+ 	( ( ./compile tryulong32.c && ./load tryulong32 && \
+@@ -2134,6 +2178,15 @@ tryulong32.c compile load uint32.h1 uint32.h2
+ 	&& cat uint32.h2 || cat uint32.h1 ) > uint32.h
+ 	rm -f tryulong32.o tryulong32
+ 
++verifyrcpt.o: \
++compile verifyrcpt.c verifyrcpt.h sig.h readwrite.h stralloc.h gen_alloc.h \
++substdio.h alloc.h auto_qmail.h control.h received.h constmap.h \
++error.h ipme.h ip.h ipalloc.h ip.h gen_alloc.h ip.h qmail.h \
++substdio.h str.h fmt.h scan.h byte.h case.h env.h now.h datetime.h \
++exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h \
++sockbits.h udpbits.h qmail-verify.h
++	./compile verifyrcpt.c
++
+ wait.a: \
+ makelib wait_pid.o wait_nohang.o
+ 	./makelib wait.a wait_pid.o wait_nohang.o
+diff --git a/TARGETS b/TARGETS
+index 0dbad3e..1117464 100644
+--- a/TARGETS
++++ b/TARGETS
+@@ -251,8 +251,14 @@ qmail-qmqpd
+ qmail-qmtpd.o
+ rcpthosts.o
+ qmail-qmtpd
++verifyrcpt.o
++sockbits.o
++udpbits.o
++scan_misc.o
+ qmail-smtpd.o
+ qmail-smtpd
++qmail-verify.o
++qmail-verify
+ sendmail.o
+ sendmail
+ tcp-env.o
+@@ -352,6 +358,7 @@ qmail-qmqpc.0
+ qmail-qmqpd.0
+ qmail-qmtpd.0
+ qmail-smtpd.0
++qmail-verify.0
+ tcp-env.0
+ qmail-newmrh.8
+ qmail-newmrh.0
+diff --git a/hier.c b/hier.c
+index 28e568d..6c6e929 100644
+--- a/hier.c
++++ b/hier.c
+@@ -127,6 +127,7 @@ void hier()
+   c(auto_qmail,"bin","qmail-qmqpd",auto_uido,auto_gidq,0755);
+   c(auto_qmail,"bin","qmail-qmtpd",auto_uido,auto_gidq,0755);
+   c(auto_qmail,"bin","qmail-smtpd",auto_uido,auto_gidq,0755);
++  c(auto_qmail,"bin","qmail-verify",auto_uido,auto_gidq,0755);
+   c(auto_qmail,"bin","sendmail",auto_uido,auto_gidq,0755);
+   c(auto_qmail,"bin","tcp-env",auto_uido,auto_gidq,0755);
+   c(auto_qmail,"bin","qreceipt",auto_uido,auto_gidq,0755);
+@@ -249,4 +250,6 @@ void hier()
+   c(auto_qmail,"man/cat8","qmail-smtpd.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-command.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-command.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-verify.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-verify.0",auto_uido,auto_gidq,0644);
+ }
+diff --git a/qmail-smtpd.8 b/qmail-smtpd.8
+index c4640b8..77f24e4 100644
+--- a/qmail-smtpd.8
++++ b/qmail-smtpd.8
+@@ -169,6 +169,66 @@ Number of seconds
+ .B qmail-smtpd
+ will wait for each new buffer of data from the remote SMTP client.
+ Default: 1200.
++.SH "RECIPIENT VERIFICATION"
++Recipient verification is enabled with the
++.B VERIFY
++environment variable. This can be used to specify per-recipient
++rejection of invalid recipient addresses (immediate verification
++causing a permanent 550 error response to the RCPT command),
++or deferred rejection at DATA time (554 response) of the whole
++session if any recipient addresses don't exist.
++
++To verify an address,
++.B qmail-smtpd
++uses a separate
++.B qmail-verify
++UDP server. By default this will be on the loopback address 127.0.0.1,
++port 11113. Enable verification like this,
++
++.EX
++   VERIFY=":"
++
++   VERIFY="DEFER"
++.EE
++
++(for immediate, deferred verification respectively). A different IP
++address and/or port can be specified for
++.B qmail-verify
++as in these examples,
++
++.EX
++   VERIFY="192.168.1.1"
++   VERIFY=":10101"
++   VERIFY="DEFER,:10101"
++   VERIFY="DEFER,192.168.1.1:10101"
++.EE
++
++Recipient verification may be explicitly disabled by setting
++.B VERIFY
++to an empty string,
++
++.EX
++   VERIFY=""
++.EE
++
++Addresses with domains appearing in
++.B control/rcpthosts
++but not in
++.B control/locals
++or
++.B control/virtualdomains
++will be considered valid, reflecting qmail's standard behaviour.
++.P
++Note that if the environment variable
++.B RELAYCLIENT
++is set, no checking is carried out.
++.P
++.B qmail-verify
++needs to be running to respond to recipient
++verification queries. If no
++.B qmail-verify
++response is received a temporary 451 error response is
++given to the remote system and the session terminated.
+ .SH "SEE ALSO"
+ tcp-env(1),
+ tcp-environ(5),
+@@ -176,4 +236,5 @@ qmail-control(5),
+ qmail-inject(8),
+ qmail-newmrh(8),
+ qmail-queue(8),
+-qmail-remote(8)
++qmail-remote(8),
++qmail-verify(8)
+diff --git a/qmail-smtpd.c b/qmail-smtpd.c
+index 89ad712..001cedd 100644
+--- a/qmail-smtpd.c
++++ b/qmail-smtpd.c
+@@ -24,6 +24,7 @@
+ #include "timeoutwrite.h"
+ #include "commands.h"
+ #include "errbits.h"
++#include "verifyrcpt.h"
+ 
+ #define enew()	{ eout("qmail-smtpd: pid "); epid(); eout3(" from ",remoteip,": "); }
+ /* Or if you prefer shorter log messages (deduce IP from tcpserver PID entry), */
+@@ -37,6 +38,8 @@ char *remotehost;
+ char *remoteinfo;
+ char *local;
+ char *relayclient;
++char *verify;
++int verifydefer=0;
+ 
+ stralloc mailfrom = {0};
+ stralloc rcptto = {0};
+@@ -148,6 +151,31 @@ void err_databytes()
+   enew(); eout("Exceeded DATABYTES limit\n"); eflush();
+   out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n");
+ }
++void die_qvsetup()
++{
++  enew(); eout3("setup failure (",error_str(errno),")\n"); eflush();
++  out("451 qv setup failure (#4.3.0)\r\n"); flush(); _exit(1);
++}
++void die_qvtimeout()
++{
++  enew(); eout("Timeout (no response from verification server)\n"); eflush();
++  out("451 qv temporary failure (#4.3.0)\r\n"); flush(); _exit(1);
++}
++void die_qvmiscfail()
++{
++  enew(); eout3("temporary failure (",error_str(errno),")\n"); eflush();
++  out("451 qv temporary failure (#4.3.0)\r\n"); flush(); _exit(1);
++}
++void err_nosuchuser550()
++{
++  enew(); eout("Unverified mailbox at RCPT time\n"); eflush();
++  out("550 sorry, no mailbox here by that name. (#5.1.1)\r\n");
++}
++void err_nosuchuser554()
++{
++  enew(); eout("Unverified mailbox(es) at DATA time\n"); eflush();
++  out("554 sorry, invalid mailbox name(s). (#5.1.1)\r\n");
++}
+ 
+ 
+ stralloc greeting = {0};
+@@ -216,6 +244,18 @@ void setup()
+   if (!remotehost) remotehost = "unknown";
+   remoteinfo = env_get("TCPREMOTEINFO");
+   relayclient = env_get("RELAYCLIENT");
++  verify =  env_get("VERIFY");
++  if (verify)
++  {
++    if (*verify == '\0') /* Disable verification if VERIFY="" */
++    {
++      verify = 0; 
++      /* Warning message since previous version of qmail-verify used VERIFY="" to enable verification */
++      enew(); eout("Note recipient verification explicitly disabled.\n"); eflush();
++    }
++    else
++      if ((*verify == 'D') || (*verify == 'd')) verifydefer=1;
++  }
+   dohelo(remotehost);
+   enew(); eout("New session\n"); eflush();
+ }
+@@ -318,6 +358,7 @@ void smtp_ehlo(arg) char *arg;
+ }
+ void smtp_rset(arg) char *arg;
+ {
++  flagdenyany = 0;
+   seenmail = 0;
+   enew(); eout("Session RSET\n"); eflush();
+   out("250 flushed\r\n");
+@@ -344,7 +385,14 @@ void smtp_rcpt(arg) char *arg; {
+     if (!stralloc_0(&addr)) die_nomem();
+   }
+   else
++  {
+     if (!addrallowed()) { err_nogateway(); return; }
++    if (verify && verifyrcpt(find_digit_colon_eos(verify),&addr,verifydefer,die_qvtimeout,die_qvmiscfail))
++    {
++      err_nosuchuser550();
++      return;
++    }
++  }
+   if (!stralloc_cats(&rcptto,"T")) die_nomem();
+   if (!stralloc_cats(&rcptto,addr.s)) die_nomem();
+   if (!stralloc_0(&rcptto)) die_nomem();
+@@ -468,6 +516,7 @@ void smtp_data(arg) char *arg; {
+  
+   if (!seenmail) { err_wantmail(); return; }
+   if (!rcptto.len) { err_wantrcpt(); return; }
++  if (verifydefer && flagdenyany) { err_nosuchuser554(); return; }
+   seenmail = 0;
+   if (databytes) bytestooverflow = databytes + 1;
+   messagebytes = 0;
+diff --git a/qmail-verify.8 b/qmail-verify.8
+new file mode 100644
+index 0000000..9646d5b
+--- /dev/null
++++ b/qmail-verify.8
+@@ -0,0 +1,136 @@
++.TH qmail-verify 8 "Andrew Richards" "28th August 2009" "v1.32"
++.SH NAME
++qmail-verify \- Address verification daemon
++.SH SYNOPSIS
++.B qmail-verify
++.SH DESCRIPTION
++.B qmail-verify
++receives UDP packets containing local email addresses and returns a
++single byte to indicate if the address is valid or invalid to the
++sender of the UDP packet.
++.B qmail-smtpd
++or
++.B qmail-qmtpd
++are typical clients using the
++.B qmail-verify
++service, although at present only
++.B qmail-smtpd
++has had this functionality added.
++.B qmail-verify
++is based on Paul Jarc's
++.B realrcptto
++patch for qmail
++.I (http://code.dogmap.org/qmail/).
++
++.B qmail-verify
++uses the files
++.I control/locals, control/virtualdomains, users/cdb,
++the system password file entries (typically in
++.B /etc/passwd
++) as well as the existence or not of users' home directories and
++.B .qmail[-xxx]
++files to determine if a given address is valid.
++
++Where a qmail system uses
++.B .qmail-default
++files on a per-domain basis in a virtual domains setup, this is
++likely to result in all addresses being considered 'valid'. This
++may not in fact be the case in certain situations, such as with
++extensions/adaptations to qmail like vpopmail which use
++.B .qmail-default
++files throughout (delivery in this case is subsequently handled
++by a vpopmail component). In these cases a replacement for
++.B qmail-verify
++will be required that can determine address validity.
++
++Other customised qmail installations that use different methods
++to locate users' mailboxes are likely to need alternatives to
++.B qmail-verify
++or a modified version of it for address verification.
++
++.SH INVOCATION
++.B qmail-verify
++should be invoked as user
++.I root
++to have sufficient privileges to
++determine the validity of a given address. In certain single-UID
++virtual domains setups, it may be sufficient to run
++.B qmail-verify
++as the single-UID.
++
++By default,
++.B qmail-verify
++listens on localhost (127.0.0.1) on port 11113. This behaviour
++can be changed by setting the environment variable
++.B LISTEN
++to specify the IP address and/or port: Set this to the desired
++IP address, optionally followed by a colon and port, thus for
++example LISTEN="192.168.1.1:10101".
++
++.SH ADDRESS VERIFICATION DETAILS
++.B qmail-verify
++is implemented by taking the various pieces of qmail that parse an
++address and combining them in the same executable,
++.B qmail-verify.
++Thus logic is taken from
++.B qmail-send, qmail-lspawn, qmail-getpw
++and
++.B qmail-local.
++
++.SH "UDP PACKET DETAILS"
++The incoming packet contains just the email address to be checked
++as a string. The string is optionally terminated with a 0 byte.
++
++The response packet contains a single byte to indicate whether the
++address is valid. The lowest-order bit of this byte indicates the
++result:
++.B 0
++for 'valid',
++.B 1
++for 'invalid'. Other bits of this response byte are set by
++.B qmail-verify
++to give further debugging information; these other bits should
++generally be disregarded.
++
++Although not especially designed as a new protocol, extensions to
++.B qmail-verify
++could require the query string to be 0 terminated
++to separate it from other data to follow. Currently the response packet
++contains the response byte and the 'Controlling user'; more
++information could potentially be returned if required.
++
++.SH CONTROL FILES
++At startup
++.B qmail-verify
++reads the following qmail control files:
++.I control/envnoathost, control/locals, control/percenthack, control/virtualdomains.
++If changes are made to any of these files,
++.B qmail-verify
++should be restarted for the changes to take effect in
++.B qmail-verify.
++
++If you are using different machines for
++.B qmail-verify
++and
++.B qmail-smtpd
++you should ensure that the machine providing the
++.B qmail-verify
++service has a full set of control files as well as the mailboxes; the machine
++running
++.B qmail-smtpd
++still needs
++.I control/rcpthosts
++to be setup.
++
++.SH LOGGING
++.B qmail-verify
++logs each decision it makes to stderr: The address followed by whether
++it's valid or not.
++
++.SH AUTHOR
++Andrew Richards, building on the work of Paul Jarc and Dan Bernstein, and with
++plenty of help along the way from Russell Nelson, John Levine and Charles Cazabon
++amongst others.
++
++.SH "SEE ALSO"
++qmail-smtpd(8).
+diff --git a/qmail-verify.c b/qmail-verify.c
+new file mode 100644
+index 0000000..641f920
+--- /dev/null
++++ b/qmail-verify.c
+@@ -0,0 +1,438 @@
++/* qmail-verify: Based on Paul Jarc's realrcptto-2006.12.10 patch
++ *		 this separates its functionality into a separate
++ *		 program that can be invoked by an appropriately
++ *		 modified qmail-smtpd. The assumption is that
++ *		 qmail-verify will run as root or the UID that
++ *		 owns mailboxes in a SingleUID setup, whilst
++ *		 qmail-smtpd can continue to run as user qmaild.
++ *
++ *               Comments have been added to show which parts of
++ *		 qmail-1.03 various sections of code relate to.
++ *
++ *		*This program is written to be used by
++ *		 qmail-smtpd communicating with it using UDP.
++ */ 
++
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#include <pwd.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include "auto_break.h"
++#include "auto_usera.h"
++#include "auto_qmail.h"
++#include "byte.h"
++#include "case.h"
++#include "cdb.h"
++#include "constmap.h"
++#include "error.h"
++#include "fmt.h"
++#include "open.h"
++#include "str.h"
++#include "stralloc.h"
++#include "uint32.h"
++#include "substdio.h"
++#include "getln.h"
++#include "env.h"
++#include "ip.h"
++#include "qmail-verify.h"
++#include "errbits.h"
++
++#define enew()  { eout("qmail-verify: "); }
++#define GETPW_USERLEN 32
++#define MAXQUERYSIZE 900
++/* 900 derived as max packet size from logic in addrparse() in qmail-smtpd.c */
++
++stralloc envnoathost = {0};
++stralloc percenthack = {0};
++stralloc locals = {0};
++stralloc vdoms = {0};
++
++struct constmap mappercenthack;
++struct constmap maplocals;
++struct constmap mapvdoms;
++
++char *quser;
++
++stralloc response = {0};
++
++char *local, *dash, *extension;
++struct passwd *pw;
++
++char ppid_s[FMT_ULONG];
++char *remoteip;
++char inbuf[MAXQUERYSIZE+1]; /* +1 for trailing \0 added after receipt */
++
++void die_nomem()   { enew(); eout("Out of memory: exiting.\n"); eflush(); _exit(1); }
++void die_control() { enew(); eout("Unable to read controls: exiting.\n"); eflush(); _exit(1); }
++void die_cdb()     { enew(); eout("Unable to read cdb user database: exiting.\n"); eflush(); _exit(1); }
++void die_sys()     { enew(); eout("Unable to read system user database: exiting.\n"); eflush(); _exit(1); }
++void die_comms()   { enew(); eout("Misc. comms problem: exiting.\n"); eflush(); _exit(1); }
++void die_inuse()   { enew(); eout("Port already in use: exiting.\n"); eflush(); _exit(1); }
++void die_socket()  { enew(); eout("Error setting up socket: exiting.\n"); eflush(); _exit(1); }
++
++char *posstr(buf,status)
++char *buf; int status;
++{
++int pos;
++
++pos = status & QVPOSBITS;
++if (pos==QVPOS1)  str_copy(buf,"1");
++else if (pos==QVPOS2)  str_copy(buf,"2");
++ else if (pos==QVPOS3)  str_copy(buf,"3");
++  else if (pos==QVPOS4)  str_copy(buf,"4");
++   else if (pos==QVPOS5)  str_copy(buf,"5");
++    else if (pos==QVPOS6)  str_copy(buf,"6");
++     else if (pos==QVPOS7)  str_copy(buf,"7");
++      else if (pos==QVPOS8)  str_copy(buf,"8");
++       else if (pos==QVPOS9)  str_copy(buf,"9");
++        else if (pos==QVPOS10) str_copy(buf,"10");
++         else if (pos==QVPOS11) str_copy(buf,"11");
++          else if (pos==QVPOS12) str_copy(buf,"12");
++           else if (pos==QVPOS13) str_copy(buf,"13");
++            else if (pos==QVPOS14) str_copy(buf,"14");
++             else if (pos==QVPOS15) str_copy(buf,"15");
++              else str_copy(buf,"??");
++return buf;
++}
++
++char posbuf[10]; /* Large enough for anything posstr() will put in it. */
++
++int allowaddr(addr,ret)
++char *addr;
++int ret;
++{
++/*eout3("[DEBUG] Pos ",posstr(posbuf,ret),", ");*/
++/*eout3("qmail-verify: ",addr," permitted.\n");*/
++  enew(); eout4(addr," permitted for ",quser?quser:"UNKNOWN",".\n");
++  eflush();
++  return ret;
++}
++
++int denyaddr(addr,ret)
++char *addr;
++int ret;
++{
++/*eout3("[DEBUG] Pos ",posstr(posbuf,ret),", ");*/
++/*eout3("qmail-verify: ",addr," denied.\n");*/
++  enew(); eout2(addr," denied.\n");
++  eflush();
++  return ret;
++}
++
++int stat_error(path,staterror,ret)
++char* path;
++int staterror,ret;
++{
++/*eout3("[DEBUG] Pos ",posstr(posbuf,ret),", ");*/
++/*eout5("qmail-verify: Unable to stat ",path,": ",error_str(staterror),".\n");*/
++  enew(); eout5("Unable to stat ",path,": ",error_str(staterror),".\n");
++  eflush();
++  return ret;
++}
++
++int userext()	/* from qmail-getpw.c */
++{
++  char username[GETPW_USERLEN];
++  struct stat st;
++
++  extension = local + str_len(local);
++  for (;;) {
++    if (extension - local < sizeof(username))
++      if (!*extension || (*extension == *auto_break)) {
++	byte_copy(username,extension - local,local);
++	username[extension - local] = 0;
++	case_lowers(username);
++	errno = 0;
++	pw = getpwnam(username);
++	if (errno == error_txtbsy) die_sys();
++	if (pw)
++	  if (pw->pw_uid)
++	    if (stat(pw->pw_dir,&st) == 0) {
++	      if (st.st_uid == pw->pw_uid) {
++		dash = "";
++		if (*extension) { ++extension; dash = "-"; }
++		return 1;
++	      }
++	    }
++	    else
++	      if (error_temp(errno)) die_sys();
++      }
++    if (extension == local) return 0;
++    --extension;
++  }
++}
++
++int verifyaddr(addr)
++char *addr;
++{
++  char *homedir;
++  /* static since they get re-used on each call to verifyaddr(). Note
++     that they don't need resetting since initial use is always with
++     stralloc_copys() except wildchars (reset with ...len=0 below). */
++  static stralloc localpart = {0};
++  static stralloc lower = {0};
++  static stralloc nughde = {0};
++  static stralloc wildchars = {0};
++  static stralloc safeext = {0};
++  static stralloc qme = {0};
++  unsigned int i,at;
++  wildchars.len=0;
++
++  /* qmail-send:rewrite */
++  if (!stralloc_copys(&localpart,addr)) die_nomem();
++  i = byte_rchr(localpart.s,localpart.len,'@');
++  if (i == localpart.len) {
++    if (!stralloc_cats(&localpart,"@")) die_nomem();
++    if (!stralloc_cat(&localpart,&envnoathost)) die_nomem();
++  }
++  while (constmap(&mappercenthack,localpart.s + i + 1,localpart.len - i - 1)) {
++    unsigned int j = byte_rchr(localpart.s,i,'%');
++    if (j == i) break;
++    localpart.len = i;
++    i = j;
++    localpart.s[i] = '@';
++  }
++  at = byte_rchr(localpart.s,localpart.len,'@');
++  if (constmap(&maplocals,localpart.s + at + 1,localpart.len - at - 1)) {
++    localpart.len = at;
++    localpart.s[at] = '\0';
++  } else {
++    unsigned int xlen,newlen;
++    char *x;
++    for (i = 0;;++i) {
++      if (i > localpart.len) return allowaddr(addr,ADDR_OK|QVPOS1);
++      if (!i || (i == at + 1) || (i == localpart.len) ||
++          ((i > at) && (localpart.s[i] == '.'))) {
++        x = constmap(&mapvdoms,localpart.s + i,localpart.len - i);
++        if (x) break;
++      }
++    }
++    if (!*x) return allowaddr(addr,ADDR_OK|QVPOS2);
++    xlen = str_len(x) + 1;  /* +1 for '-' */
++    newlen = xlen + at + 1; /* +1 for \0 */
++    if (xlen < 1 || newlen - 1 < xlen || newlen < 1 ||
++        !stralloc_ready(&localpart,newlen))
++      die_nomem();
++    localpart.s[newlen - 1] = '\0';
++    byte_copyr(localpart.s + xlen,at,localpart.s);
++    localpart.s[xlen - 1] = '-';
++    byte_copy(localpart.s,xlen - 1,x);
++    localpart.len = newlen;
++  }
++
++  /* qmail-lspawn:nughde_get */
++  {
++    /* qmail-lspawn lines 83-128 */
++    int r,fd,flagwild;
++
++    if (!stralloc_copys(&lower,"!")) die_nomem();
++    if (!stralloc_cats(&lower,localpart.s)) die_nomem();
++    if (!stralloc_0(&lower)) die_nomem();
++    case_lowerb(lower.s,lower.len);
++
++    if (!stralloc_copys(&nughde,"")) die_nomem();
++
++    fd = open_read("users/cdb");
++    if (fd == -1) {
++      if (errno != error_noent) die_cdb();
++    }
++    else
++    { /* This section parses users/cdb file */
++      uint32 dlen;
++
++      r = cdb_seek(fd,"",0,&dlen);
++      if (r != 1) die_cdb();
++      if (!stralloc_ready(&wildchars,(unsigned int) dlen)) die_nomem();
++      wildchars.len = dlen;
++      if (cdb_bread(fd,wildchars.s,wildchars.len) == -1) die_cdb();
++
++      i = lower.len;
++      flagwild = 0;
++
++      do { /* i > 0 */
++        if (!flagwild || (i == 1) ||
++            (byte_chr(wildchars.s,wildchars.len,lower.s[i - 1]) < wildchars.len))
++        {
++          r = cdb_seek(fd,lower.s,i,&dlen);
++          if (r == -1) die_cdb();
++          if (r == 1)
++          {
++            char *x;
++            if (!stralloc_ready(&nughde,(unsigned int) dlen)) die_nomem();
++            nughde.len = dlen;
++            if (cdb_bread(fd,nughde.s,nughde.len) == -1) die_cdb();
++            if (flagwild)
++              if (!stralloc_cats(&nughde,localpart.s + i - 1)) die_nomem();
++            if (!stralloc_0(&nughde)) die_nomem();
++            close(fd);
++            /* maybe based on qmail-lspawn lines 190-214 */
++            x=nughde.s;
++            quser=nughde.s;
++            /* skip username */
++            x += byte_chr(x,nughde.s + nughde.len - x,'\0');
++            if (x == nughde.s + nughde.len) return allowaddr(addr,ADDR_OK|QVPOS3);
++            ++x;
++            /* skip uid */
++            x += byte_chr(x,nughde.s + nughde.len - x,'\0');
++            if (x == nughde.s + nughde.len) return allowaddr(addr,ADDR_OK|QVPOS4);
++            ++x;
++            /* skip gid */
++            x += byte_chr(x,nughde.s + nughde.len - x,'\0');
++            if (x == nughde.s + nughde.len) return allowaddr(addr,ADDR_OK|QVPOS5);
++            ++x;
++            /* skip homedir */
++            homedir=x;
++            x += byte_chr(x,nughde.s + nughde.len - x,'\0');
++            if (x == nughde.s + nughde.len) return allowaddr(addr,ADDR_OK|QVPOS6);
++            ++x;
++            /* skip dash */
++            dash=x;
++            x += byte_chr(x,nughde.s + nughde.len - x,'\0');
++            if (x == nughde.s + nughde.len) return allowaddr(addr,ADDR_OK|QVPOS7);
++            ++x;
++            extension=x;
++            goto got_nughde;
++          }
++        }
++        /* qmail-lspawn lines 132-137 */
++        --i;
++        flagwild = 1;
++      } while (i);
++      close(fd);
++    }
++  }
++
++  /* qmail-getpw lines 61-70 */
++  local = localpart.s;
++  quser = local;
++  if (!userext()) {
++    extension = local;
++    dash = "-";
++    pw = getpwnam(auto_usera);
++    quser = auto_usera;
++  }
++  if (!pw) return denyaddr(addr,ADDR_NOK|QVPOS8);
++  if (!stralloc_copys(&nughde,pw->pw_dir)) die_nomem();
++  if (!stralloc_0(&nughde)) die_nomem();
++  homedir=nughde.s;
++
++  got_nughde:
++
++  /* qmail-local:qmesearch, note qmeexists() becomes stralloc_0 + stat() */
++  if (!*dash) return allowaddr(addr,ADDR_OK|QVPOS9);
++  if (!stralloc_copys(&safeext,extension)) die_nomem();
++  case_lowerb(safeext.s,safeext.len);
++  for (i = 0;i < safeext.len;++i)
++    if (safeext.s[i] == '.')
++      safeext.s[i] = ':';
++  {
++    /* qmail-local lines 383-388 */
++    struct stat st;
++    int i;
++    if (!stralloc_copys(&qme,homedir)) die_nomem();
++    if (!stralloc_cats(&qme,"/.qmail")) die_nomem();
++    if (!stralloc_cats(&qme,dash)) die_nomem();
++    if (!stralloc_cat(&qme,&safeext)) die_nomem();
++    if (!stralloc_0(&qme)) die_nomem();
++/* e.g. homedir/.qmail-localpart */
++    if (stat(qme.s,&st) == 0) return allowaddr(addr,ADDR_OK|QVPOS10);
++    if (errno != error_noent) {
++      return stat_error(qme.s,errno, STATERR|QVPOS11); /* Maybe not running as root so access denied */
++    }
++    /* qmail-local lines 398-404 */
++    for (i = safeext.len;i >= 0;--i)
++      if (!i || (safeext.s[i - 1] == '-')) {
++        if (!stralloc_copys(&qme,homedir)) die_nomem();
++        if (!stralloc_cats(&qme,"/.qmail")) die_nomem();
++        if (!stralloc_cats(&qme,dash)) die_nomem();
++        if (!stralloc_catb(&qme,safeext.s,i)) die_nomem();
++        if (!stralloc_cats(&qme,"default")) die_nomem();
++        if (!stralloc_0(&qme)) die_nomem();
++/* e.g. homedir/.qmail-[xxx-]default */
++        if (stat(qme.s,&st) == 0) return allowaddr(addr,ADDR_OK|QVPOS12);
++        if (errno != error_noent) /* Maybe not running as root so access denied */
++          return stat_error(qme.s,errno,STATERR|QVPOS13);
++      }
++    return denyaddr(addr,ADDR_NOK|QVPOS14);
++  }
++  return denyaddr(addr,ADDR_NOK|QVPOS15); /* Not sure under what conditions this line triggered, if any */
++}
++
++int main()
++{
++  int n, sock;
++  char result;
++  socklen_t clientaddrlen;
++  struct sockaddr_in sin, clientaddr;
++  unsigned long lport; /* for scan_ulong, scan_uint not in qmail src */
++  struct ip_address i;
++  char *s;
++
++  if (chdir(auto_qmail) == -1) die_control();
++
++  if (control_rldef(&envnoathost,"control/envnoathost",1,"envnoathost") != 1)
++    die_control();
++
++  if (control_readfile(&locals,"control/locals",1) != 1) die_control();
++  if (!constmap_init(&maplocals,locals.s,locals.len,0)) die_nomem();
++  switch(control_readfile(&percenthack,"control/percenthack",0)) {
++    case -1: die_control();
++    case 0: if (!constmap_init(&mappercenthack,"",0,0)) die_nomem();
++    case 1:
++      if (!constmap_init(&mappercenthack,percenthack.s,percenthack.len,0))
++        die_nomem();
++  }
++  switch(control_readfile(&vdoms,"control/virtualdomains",0)) {
++    case -1: die_control();
++    case 0: if (!constmap_init(&mapvdoms,"",0,1)) die_nomem();
++    case 1: if (!constmap_init(&mapvdoms,vdoms.s,vdoms.len,1)) die_nomem();
++  }
++  if (!(s = env_get("LISTEN"))) s=DEFAULTQVIP;
++
++  /* Re-read control files above on SIGHUP? */
++
++  if (!(n=ip_scan(s,&i))) ip_scan(DEFAULTQVIP,&i);
++  s+=n; if ((*s==':') && scan_ulong(s+1,&lport)) ; else lport=DEFAULTQVPORT;
++
++  byte_zero(&sin, sizeof(sin));
++  sin.sin_family = AF_INET;
++  sin.sin_port = htons(lport);
++/*sin.sin_len = sizeof(sin); (optional, not defined on all systems) */
++  byte_copy(&sin.sin_addr, sizeof(i),&i);
++
++  if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) die_socket();
++  if (bind(sock, (struct sockaddr *) &sin, sizeof(sin))< 0) die_inuse();
++
++  { char tmps1[IPFMT+1], tmps2[FMT_ULONG+1];
++    tmps1[ip_fmt(tmps1,&i)]=0;
++    tmps2[fmt_ulong(tmps2,ntohs(sin.sin_port))]=0;
++    enew(); eout5("Listening on address: ",tmps1,", port ",tmps2,".\n"); eflush();
++  }
++  for (;;)
++  {
++    clientaddrlen=sizeof(clientaddr); /* Read & set by recvfrom */
++    n = recvfrom(sock,inbuf, MAXQUERYSIZE, 0, (struct sockaddr *)&clientaddr, &clientaddrlen);
++    if (n<=0) /* <0 for error, 0 for empty packet. */
++    {
++      enew(); eout("Error receiving packet.\n"); eflush();
++      continue;
++    }
++    inbuf[n]='\0'; /* Turn it into a string ('\0' terminated) */
++
++    quser = 0;
++    result=(char)verifyaddr(inbuf);
++
++    /* 'short' response packet - just the status byte - use the line below to replace 'long' version */
++    /* if (sendto(sock,&result,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)) < 0) die_comms(); */
++
++    /* 'long' response packet - status byte + controlling user (quser) */
++    stralloc_ready(&response, 2);
++    stralloc_copyb(&response, &result, 1);
++    if (quser) stralloc_cats(&response, quser);
++    if (response.len > QVRESPONSELEN) response.len = QVRESPONSELEN; /* Trim oversize response */
++    if (sendto(sock,response.s,response.len,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)) < 0) die_comms();
++
++  }
++}
+diff --git a/qmail-verify.h b/qmail-verify.h
+new file mode 100644
+index 0000000..5a1b8d5
+--- /dev/null
++++ b/qmail-verify.h
+@@ -0,0 +1,34 @@
++#define DEFAULTQVPORT 11113
++#define DEFAULTQVIP "127.0.0.1"
++#define DEFAULTQVTIMEOUT 5
++
++#define GETPW_USERLEN 32
++/* Response length is status byte + username length */
++#define QVRESPONSELEN (1+GETPW_USERLEN)
++
++/* ADDR_NOK, ADDR_OK, ADDR_NOK_TEMP get ORed with POSx for possible debugging. */
++#define ADDR_NOK_TEMP	0x02
++#define ADDR_NOK	0x01
++#define ADDR_OK		0x00
++/* Treat a stat() error as 'valid address'; maybe not running with sufficient rights */
++#define STATERR ADDR_OK
++/* Which bits show OK / NOK: */
++#define QVRESULTBITS 0x0f
++
++#define QVPOS1	0x10
++#define QVPOS2	0x20
++#define QVPOS3	0x30
++#define QVPOS4	0x40
++#define QVPOS5	0x50
++#define QVPOS6	0x60
++#define QVPOS7	0x70
++#define QVPOS8	0x80
++#define QVPOS9	0x90
++#define QVPOS10	0xa0
++#define QVPOS11	0xb0
++#define QVPOS12	0xc0
++#define QVPOS13	0xd0
++#define QVPOS14	0xe0
++#define QVPOS15	0xf0
++/* Which bits show QVPOSx: */
++#define QVPOSBITS 0xf0
+diff --git a/scan.h b/scan.h
+index 53ce703..eddbaa8 100644
+--- a/scan.h
++++ b/scan.h
+@@ -24,4 +24,7 @@ extern unsigned int scan_memcmp();
+ 
+ extern unsigned int scan_long();
+ 
++extern char *find_digit_colon_eos();
++extern int scan_ip_port();
++
+ #endif
+diff --git a/scan_misc.c b/scan_misc.c
+new file mode 100644
+index 0000000..3e20a75
+--- /dev/null
++++ b/scan_misc.c
+@@ -0,0 +1,39 @@
++#include "stralloc.h"
++#include "ip.h"
++#include "scan.h"
++
++/* Returns pointer to first digit or ':' in string, or end-of-string
++ * if neither found. Useful prior to scan_ip_port() if any options
++ * may precede the IP / port in the string. */
++char *find_digit_colon_eos(s)
++char *s;
++{
++  while (*s != '\0')
++  {
++    if ( *s == ':') return s;
++    if ((*s >= '0') && (*s <= '9')) return s;
++    s++;
++  }
++  return s; /* end of string '\0' */
++}
++
++/* Takes a string specifying IP address and port, separated by ':'
++ * If IP address and/or port are missing, supplied defaults are used.
++ * 0, -1 returned on success, failure respectively. */
++int scan_ip_port(s,defaultip,defaultport,ipp,portp)
++char *s, *defaultip;
++struct ip_address *ipp;
++unsigned int defaultport, *portp;
++{
++  int n;
++  char *sp;
++  unsigned long port; /* long because of scan_ulong */
++
++  if (!s) return -1; /* Can't scan a null string */
++  sp = s;
++  if (!(n=ip_scan(sp, ipp))) ip_scan(defaultip,ipp);
++  sp += n; /* n is 0 if no IP found */
++  if (!((*sp==':') && scan_ulong(sp+1,&port))) port=defaultport;
++  *portp = (unsigned int)port;
++  return 0;
++}
+diff --git a/sockbits.c b/sockbits.c
+new file mode 100644
+index 0000000..05d1953
+--- /dev/null
++++ b/sockbits.c
+@@ -0,0 +1,31 @@
++#include "sockbits.h"
++#include "stralloc.h"
++#include <sys/types.h>
++#include <sys/socket.h>
++#include "error.h"
++
++int query_skt(fd,queryp,responsep,maxresponsesize,timeout,timeoutfn,errfn)
++int fd;
++stralloc *queryp;
++char *responsep;
++int maxresponsesize, timeout;
++void (*errfn)(), (*timeoutfn)();
++{
++  fd_set rfs;
++  struct timeval tv;
++  int nbytes;
++  int r=0;
++
++  if (write(fd,queryp->s,queryp->len) < 0) (*errfn)();
++  tv.tv_sec=timeout; tv.tv_usec=0;
++  FD_ZERO(&rfs); FD_SET(fd,&rfs);
++  if ((r=select(fd+1,&rfs,(fd_set *) 0,(fd_set *) 0,&tv)) <= 0) /* 0 timeout or -1 error */
++  {
++    if ((r == 0) && (errno == error_timeout)) (*timeoutfn)();
++    else (*errfn)();
++    return r; /* if timeoutfn() / errfn() doesn't _exit() */
++  }
++  nbytes = read(fd,responsep,maxresponsesize);
++  if (nbytes < 0) (*errfn)();
++  return (nbytes); /* including 0 = no output */
++}
+diff --git a/sockbits.h b/sockbits.h
+new file mode 100644
+index 0000000..2a02749
+--- /dev/null
++++ b/sockbits.h
+@@ -0,0 +1 @@
++extern int query_skt();
+diff --git a/udpbits.c b/udpbits.c
+new file mode 100644
+index 0000000..3b17f52
+--- /dev/null
++++ b/udpbits.c
+@@ -0,0 +1,24 @@
++#include "udpbits.h"
++#include "ip.h"
++#include "byte.h"
++#include <sys/types.h>
++#include <netinet/in.h>
++#include <sys/socket.h>
++
++int connect_udp(ip,port,errfn)
++struct ip_address ip;
++unsigned int port;
++void (*errfn)();
++{
++  struct sockaddr_in sout;
++  int fd;
++
++  byte_zero(&sout,sizeof(sout));
++  sout.sin_port = htons(port);
++  sout.sin_family=AF_INET;
++  byte_copy(&sout.sin_addr,sizeof(ip),&ip);
++/*sout.sin_len = sizeof(sout); Commented out since optional & sin_len not defined on all OSes */
++  if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) (*errfn)();
++  if (connect(fd,(struct sockaddr *)&sout,sizeof(sout)) < 0) (*errfn)();
++  return fd;
++}
+diff --git a/udpbits.h b/udpbits.h
+new file mode 100644
+index 0000000..d19e12a
+--- /dev/null
++++ b/udpbits.h
+@@ -0,0 +1 @@
++extern int connect_udp();
+diff --git a/verifyrcpt.c b/verifyrcpt.c
+new file mode 100644
+index 0000000..8f737b1
+--- /dev/null
++++ b/verifyrcpt.c
+@@ -0,0 +1,45 @@
++#include "verifyrcpt.h"
++#include "qmail-verify.h"
++#include "ip.h"
++#include "stralloc.h"
++#include "scan.h"
++#include <sys/types.h>
++
++static int verifyrcpt_initialised=0;
++static int sockfd;
++
++int flagdenyany=0; /* Can be interrogated in qmail-smtpd.c */
++
++void verifyrcpt_init(svr,errfn) /* errfn must _exit */
++char *svr; void (*errfn)();
++{
++  struct ip_address ip;
++  unsigned int port;
++
++  if (scan_ip_port(svr,DEFAULTQVIP,DEFAULTQVPORT,&ip,&port) == -1) (*errfn)();
++  sockfd = connect_udp(ip,port,errfn);
++  verifyrcpt_initialised=1;
++}
++
++int verifyrcpt(vip,r,defer,timeoutfn,errfn)
++char *vip; stralloc *r; int defer; void (*timeoutfn)(),(*errfn)();
++{
++  char qvresponse[QVRESPONSELEN+1]; /* +1 for '\0' at end */
++  int result,n;
++
++  if (!vip) (*errfn)(); /* verifyrcpt should only be called if vip set */
++  if (!verifyrcpt_initialised) verifyrcpt_init(vip,errfn);
++
++  if (defer && flagdenyany) return ADDR_OK; /* Optional short circuit; "Controlling user" not discovered; remove this line if it's needed */
++  n = query_skt(sockfd,r,qvresponse,QVRESPONSELEN,DEFAULTQVTIMEOUT,timeoutfn,errfn);
++  if (n == 0) (*errfn)();
++  result = qvresponse[0] & QVRESULTBITS;
++  qvresponse[ ( (n > QVRESPONSELEN) ? QVRESPONSELEN : n) ] = '\0';
++    /* "Controlling user" available in qvresponse+1 for logging etc. */
++
++  if (result == ADDR_OK)
++    return ADDR_OK;
++  /* NOK: */
++  flagdenyany = 1;
++  return defer?ADDR_OK:ADDR_NOK; /* ADDR_OK if we're rejecting later */
++}
+diff --git a/verifyrcpt.h b/verifyrcpt.h
+new file mode 100644
+index 0000000..07c48b5
+--- /dev/null
++++ b/verifyrcpt.h
+@@ -0,0 +1,3 @@
++extern int flagdenyany;
++void verifyrcpt_init();
++int verifyrcpt();
+-- 
+1.7.0
+

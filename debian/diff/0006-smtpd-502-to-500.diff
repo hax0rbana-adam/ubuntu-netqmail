@@ -1,0 +1,24 @@
+--- a/qmail-smtpd.c	2015-03-12 18:08:59 +0000
++++ b/qmail-smtpd.c	2015-03-12 18:13:34 +0000
+@@ -109,6 +109,11 @@
+   enew(); eout("Unimplemented command\n"); eflush();
+   out("502 unimplemented (#5.5.1)\r\n");
+ }
++void err_unrecog(arg) char *arg;
++{
++  enew(); eout("Unrecognized command\n"); eflush();
++  out("500 unrecognised (#5.5.2)\r\n");
++}
+ void err_syntax(cmd) char *cmd;
+ {
+   char tmp_buf[FMT_ULONG];
+@@ -555,7 +560,7 @@
+ , { "help", smtp_help, flush }
+ , { "noop", err_noop, flush }
+ , { "vrfy", err_vrfy, flush }
+-, { 0, err_unimpl, flush }
++, { 0, err_unrecog, flush }
+ } ;
+ 
+ void main()
+

@@ -1,0 +1,2215 @@
+=== added file 'FILES.auth'
+--- a/FILES.auth	1970-01-01 00:00:00 +0000
++++ b/FILES.auth	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,27 @@
++The qmail-smtpd Auth patch modifies the following QMAIL 1.03 files:
++
++= TARGETS
++= Makefile
++= qmail-smtpd.c
++= qmail-smtpd.8
++= qmail-remote.c
++= qmail-remote.8
++= qmail-showctl.c
++= qmail-control.9
++
++Added files:
++
+++ base64.c
+++ base64.h
+++ case_startb.c
+++ hmac_md5.h
+++ hmac_md5.c
+++ global.h
+++ md5.h
+++ md5c.c
++
++Informational files:
++
++% install_auth.sh  (Installation shell script)
++% LICENSE.authentication (some sort of ...)
++% README.auth
+
+=== added file 'LICENSE.authentication'
+--- a/LICENSE.authentication	1970-01-01 00:00:00 +0000
++++ b/LICENSE.authentication	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,43 @@
++AUTHOR
++======
++
++Author:
++	Dr. Erwin Hoffmann - FEHCom Germany
++Web-Site: 	
++	http://www.fehcom.de/qmail.html
++E-Mail: 	
++	feh@fehcom.de
++
++
++LICENSE
++=======
++
++qmail AUTHENTICATION is free software.
++This includes:
++	You can download and use qmail AUTHENTICATION (and parts of it) as you like.
++	You can modify the source code without notification to or permission by the author.
++Please check:
++	http://www.cr.yp.to/softwarelaw.html
++
++
++DEPENDENCIES
++============
++
++qmail AUTHENTICATION patches (modifies) parts of the qmail-1.03 source files.
++It should only be applied against the source as supplied by D.J. Bernstein.
++
++
++FITNESS
++=======
++
++The Author does not guarantee a specific fitness of qmail AUTHENTICATION.
++If you use qmail AUTHENTICATION, it's on your own risk.
++
++
++DISTRIBUTION
++============
++
++qmail AUTHENTICATION may be included in ports and packages under the following conditions:
++	The port/package has to show the current version number of qmail AUTHENTICATION.
++	All files (namely this) have to be included.
++
+
+=== modified file 'Makefile'
+--- a/Makefile	2015-03-12 22:14:34 +0000
++++ b/Makefile	2015-03-12 22:14:59 +0000
+@@ -136,6 +136,18 @@
+ compile auto_usera.c
+ 	./compile auto_usera.c
+ 
++base64.o: \
++compile base64.c base64.h stralloc.h substdio.h str.h
++	./compile base64.c
++
++md5c.o : \
++compile md5c.c md5.h
++	./compile md5c.c
++
++hmac_md5.o : \
++compile hmac_md5.c hmac_md5.h global.h
++	./compile hmac_md5.c
++
+ binm1: \
+ binm1.sh conf-qmail
+ 	cat binm1.sh \
+@@ -1445,12 +1457,15 @@
+ load qmail-remote.o control.o constmap.o timeoutread.o timeoutwrite.o \
+ timeoutconn.o tcpto.o now.o dns.o ip.o ipalloc.o ipme.o quote.o \
+ ndelay.a case.a sig.a open.a lock.a seek.a getln.a stralloc.a alloc.a \
+-substdio.a error.a str.a fs.a auto_qmail.o dns.lib socket.lib
++substdio.a error.a str.a fs.a auto_qmail.o \
++base64.o md5c.o hmac_md5.o \
++dns.lib socket.lib
+ 	./load qmail-remote control.o constmap.o timeoutread.o \
+ 	timeoutwrite.o timeoutconn.o tcpto.o now.o dns.o ip.o \
+ 	ipalloc.o ipme.o quote.o ndelay.a case.a sig.a open.a \
+ 	lock.a seek.a getln.a stralloc.a alloc.a substdio.a error.a \
+-	str.a fs.a auto_qmail.o  `cat dns.lib` `cat socket.lib`
++	base64.o md5c.o hmac_md5.o \
++	str.a fs.a auto_qmail.o `cat dns.lib` `cat socket.lib`
+ 
+ qmail-remote.0: \
+ qmail-remote.8
+@@ -1544,7 +1559,7 @@
+ datetime.a getln.a \
+ open.a sig.a case.a env.a stralloc.a errbits.o \
+ alloc.a substdio.a error.a str.a \
+-fs.a auto_qmail.o socket.lib
++fs.a auto_qmail.o base64.o socket.lib
+ 	./load qmail-smtpd rcpthosts.o commands.o timeoutread.o \
+ 	sockbits.o udpbits.o verifyrcpt.o \
+ 	timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o \
+@@ -1552,7 +1567,7 @@
+ 	scan_misc.o \
+ 	datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
+ 	errbits.o \
+-	alloc.a substdio.a error.a str.a fs.a auto_qmail.o  `cat \
++	alloc.a substdio.a error.a str.a fs.a auto_qmail.o base64.o  `cat \
+ 	socket.lib`
+ 
+ qmail-smtpd.0: \
+@@ -1565,7 +1580,7 @@
+ error.h ipme.h ip.h ipalloc.h ip.h gen_alloc.h ip.h qmail.h \
+ substdio.h str.h fmt.h scan.h byte.h case.h env.h now.h datetime.h \
+ sockbits.h udpbits.h qmail-verify.h \
+-exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h
++exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h base64.h
+ 	./compile qmail-smtpd.c
+ 
+ qmail-start: \
+
+=== added file 'README.auth'
+--- a/README.auth	1970-01-01 00:00:00 +0000
++++ b/README.auth	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,152 @@
++README qmail SMTP Authentication
++================================
++
++Scope:
++------
++
++This patch supports RFC 2554 "SMTP Service Extension for Authentication" and 
++RFC 4409 "Message Submission for Mail" for 
++
++* qmail-smtpd and
++* qmail-remote
++
++and supports commonly the AUTH methods
++
++- CRAM-MD5
++- LOGIN (unsecure)
++- PLAIN (unsecure)
++
++Additionally, RFC 1870 is honoured ("SMTP Service Extension for Message Size Declaration").
++For more technical details see: http://www.fehcom.de/qmail/docu/smtpauth.html.
++
++
++Installation:
++-------------
++
++* Untar the source in the qmail-1.03 home direcotry.
++* Run ./install_auth.
++* Re-make qmail.
++
++
++Setup for qmail-smtpd:
++----------------------
++
++1. Prereqs:
++
++In order to use SMTP Authentication you have to use a 'Pluggable Authentication Module'
++PAM to be called by qmail-smtpd; typically
++
++	/var/qmail/bin/qmail-smtpd /bin/checkpassword true 2>&1
++
++Since qmail-smtpd does not run as root, checkpassword has to be made sticky.
++There is no need to include additionally the hostname in the call.
++In order to compute the CRAM-MD5 challenge, qmail-smtpd uses the 'tcplocalhost' information.
++
++2. Invocation:
++
++In order activate SMTP authentication, you need to provide the environment
++variable 'SMTPAUTH' to qmail-smtpd.
++
++Possible choices:
++	
++	a) SMTPAUTH=""; 	qmail-smtpd supports auth of type PLAIN and/or LOGIN.
++	b) SMTPAUTH="+cram";	qmail-smtpd will additionally annonce CRAM-MD5,
++				this requires a CRAM-MD5 supporting PAM.
++	c) SMTPAUTH="cram";	qmail-smtpd will only annonce CRAM-MD5.
++	d) SMTPAUTH="!";	this instructs qmail-smtpd to require (any type) authentication for this connection.
++				This behavior is equivalent to the Submission feaure.
++	e) SMTPAUTH="!cram";	same as d) but now CRAM-MD5 is the only method instead.
++
++
++Setup for qmail-remote:
++-----------------------
++
++SMTP Authentication with qmail-remote is faclitated by two means:
++
++a) SMTP Authentication by sender/sending domain as provided in the 'Mail From:'
++
++The control file 'authsenders' which works similar to 'control/smtproutes'
++but with additional authentication information (username + password):
++
++    @example.com:relay.example.com|user|passwd
++    info@example.com:relay.example.com:26|infouser|infopasswd
++    :mailrelay.example.com:587|e=mc2|testpass
++
++Note: The choice of the AUTH method depends on the capabilities of the server.
++
++b) SMTP Authentication by recipient domain: 
++
++The control file 'smtproutes' is enhanced with the authentication information:
++
++    authdomain.com:mx.authdomain.com:125|myuserid|mypassword
++    :mailrelay.example.com:587|e=mc2|testpass
++
++
++Historical Notes:
++-----------------
++
++SMTP authentication for qmail-smtpd was initially provided by Krysztof Dabrowski (version 0.31):
++
++
++Changes wrt. Krysztof Dabrowski's patch:
++
++* Avoid the 'hostname' in the call of the PAM.
++* Confirm to Dan Bernstein's checkpassword interface even for CRAM-MD5.
++* Doesn't close FD 2; thus not inhibiting logging to STDERR.
++* Fixed bugs in base64.c.
++* Modified unconditional close of FD 3 in order to sustain reading of 'control/morecpthosts.cdb'.
++* Evaluation of the (informational) Mail From: < > Auth=username.
++* Additional support for the advertised "Size" via 'Mail From: <return-path> SIZE=123456780' (RFC 1870).
++* RFC 3848 conformance for Received header in case of SMTP Auth (keyword ESMTPA).
++* Added SMTPAUTH environment variable.
++* The particular Submission feature has been removed; obsolete.
++
++
++SMTP authentication for qmail-remote is taken from Bjoern Kalkbrenner.
++
++Changes wrt. Bjoern Kalkbrenner's patch (version 0.0.1 / 20020715):
++
++* Uniform, modular support for LOGIN and PLAIN.
++* Added 'Mail From: < > Auth=username' information in provisionally XTEXT format.
++* Added CRAM-MD5 support.
++* Added authentication by recipient domain.
++
++
++Release Notes:
++--------------
++
++Version:	Notes:					Date:
++-------------------------------------------------------------------
++0.5.9		qmail-smtpd AUTH (only)			25.3.2008
++0.6.9		qmail-authentication			1.2.2010
++0.7.0		Based on qmail-authentication 0.69
++		including now CRAM-MD5 support
++		for qmail-remote			31.7.2010
++0.7.1		cosmetics for qmail-remote		5.8.2010
++0.7.2		authorization-id = authentication-id
++		for qmail-remote;
++		added SMTPAUTH environment variable 
++		for qmail-smtpd; backport from SC 2.7	29.4.2012
++0.7.3		Fixed missing AUTH for qmai-smtpd announcement.
++		Improved SUBMISSION port handling.	2.5.2012
++0.7.4		Fixed missing 250 statements for AUTH.
++		Changed SMTPAUTH settings for cram-md5 	18.5.2012
++0.7.5		Fixed bug in qmail-remote not respecting
++		announced AUTH types. Tx. Callum Gibson.
++		Added '432' server code evaluation for
++	 	AUTH password expired in qmail-remote. 	23.10.2012
++0.7.6		Fixed order of SMTP commands (tx roberto).
++							02.02.2013
++0.8.0		Added authentication by recipient domain
++		for qmail-remote.
++		Removed SUBMISSION port feature for
++		qmail-smtpd.				22.03.2013
++0.8.1		Added SMTPAUTH="!+crom" feature.	24.03.2013
++0.8.2		Bug fix: qmail-smtpd ACCEPTS auth commands
++		even if SMTPAUTH="-". (tx chris).	21.01.2015
++
++
++
++Erwin Hoffmann - Hoehn 2015-01-21 (www.fehcom.de)
++
++
+
+=== modified file 'TARGETS'
+--- a/TARGETS	2015-03-12 22:14:34 +0000
++++ b/TARGETS	2015-03-12 22:14:59 +0000
+@@ -10,6 +10,7 @@
+ qmail.o
+ quote.o
+ now.o
++base64.o
+ gfrom.o
+ myctime.o
+ slurpclose.o
+@@ -183,6 +184,8 @@
+ qmail-remote
+ qmail-rspawn.o
+ tcpto_clean.o
++md5c.o
++hmac_md5.o
+ qmail-rspawn
+ direntry.h
+ qmail-clean.o
+
+=== added file 'base64.c'
+--- a/base64.c	1970-01-01 00:00:00 +0000
++++ b/base64.c	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,124 @@
++#include "base64.h"
++#include "stralloc.h"
++#include "substdio.h"
++#include "str.h"
++
++static char *b64alpha =
++  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++#define B64PAD '='
++
++/* returns 0 ok, 1 illegal, -1 problem */
++
++int b64decode(in,l,out)
++const unsigned char *in;
++int l;
++stralloc *out; /* not null terminated */
++{
++  int p = 0;
++  int n;
++  unsigned int x;
++  int i, j;
++  char *s;
++  unsigned char b[3];
++
++  if (l == 0)
++  {
++    if (!stralloc_copys(out,"")) return -1;
++    return 0;
++  }
++
++  while(in[l-1] == B64PAD) {
++    p ++;
++    l--;
++  }
++
++  n = (l + p) / 4;
++  i = (n * 3) - p;
++  if (!stralloc_ready(out,i)) return -1;
++  out->len = i;
++  s = out->s;
++
++  for(i = 0; i < n - 1 ; i++) {
++    x = 0;
++    for(j = 0; j < 4; j++) {
++      if(in[j] >= 'A' && in[j] <= 'Z')
++        x = (x << 6) + (unsigned int)(in[j] - 'A' + 0);
++      else if(in[j] >= 'a' && in[j] <= 'z')
++        x = (x << 6) + (unsigned int)(in[j] - 'a' + 26);
++      else if(in[j] >= '0' && in[j] <= '9')
++        x = (x << 6) + (unsigned int)(in[j] - '0' + 52);
++      else if(in[j] == '+')
++        x = (x << 6) + 62;
++      else if(in[j] == '/')
++        x = (x << 6) + 63;
++      else if(in[j] == '=')
++        x = (x << 6);
++    }
++
++    s[2] = (unsigned char)(x & 255); x >>= 8;
++    s[1] = (unsigned char)(x & 255); x >>= 8;
++    s[0] = (unsigned char)(x & 255); x >>= 8;
++    s += 3; in += 4;
++  }
++
++  x = 0;
++  for(j = 0; j < 4; j++) {
++    if(in[j] >= 'A' && in[j] <= 'Z')
++      x = (x << 6) + (unsigned int)(in[j] - 'A' + 0);
++    else if(in[j] >= 'a' && in[j] <= 'z')
++      x = (x << 6) + (unsigned int)(in[j] - 'a' + 26);
++    else if(in[j] >= '0' && in[j] <= '9')
++      x = (x << 6) + (unsigned int)(in[j] - '0' + 52);
++    else if(in[j] == '+')
++      x = (x << 6) + 62;
++    else if(in[j] == '/')
++      x = (x << 6) + 63;
++    else if(in[j] == '=')
++      x = (x << 6);
++  }
++
++  b[2] = (unsigned char)(x & 255); x >>= 8;
++  b[1] = (unsigned char)(x & 255); x >>= 8;
++  b[0] = (unsigned char)(x & 255); x >>= 8;
++
++  for(i = 0; i < 3 - p; i++)
++    s[i] = b[i];
++
++  return 0;
++}
++
++int b64encode(in,out)
++stralloc *in;
++stralloc *out; /* not null terminated */
++{
++  unsigned char a, b, c;
++  int i;
++  char *s;
++
++  if (in->len == 0)
++  {
++    if (!stralloc_copys(out,"")) return -1;
++    return 0;
++  }
++
++  i = in->len / 3 * 4 + 4;   
++  if (!stralloc_ready(out,i)) return -1;
++  s = out->s;
++
++  for (i = 0;i < in->len;i += 3) {
++    a = in->s[i];
++    b = i + 1 < in->len ? in->s[i + 1] : 0;
++    c = i + 2 < in->len ? in->s[i + 2] : 0;
++
++    *s++ = b64alpha[a >> 2];
++    *s++ = b64alpha[((a & 3 ) << 4) | (b >> 4)];
++
++    if (i + 1 >= in->len) *s++ = B64PAD;
++    else *s++ = b64alpha[((b & 15) << 2) | (c >> 6)];
++
++    if (i + 2 >= in->len) *s++ = B64PAD;
++    else *s++ = b64alpha[c & 63];
++  }
++  out->len = s - out->s;
++  return 0;
++}
+
+=== added file 'base64.h'
+--- a/base64.h	1970-01-01 00:00:00 +0000
++++ b/base64.h	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,7 @@
++#ifndef BASE64_H
++#define BASE64_H
++
++extern int b64decode();
++extern int b64encode();
++
++#endif
+
+=== added file 'case_startb.c'
+--- a/case_startb.c	1970-01-01 00:00:00 +0000
++++ b/case_startb.c	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,21 @@
++#include "case.h"
++
++int case_startb(s,len,t)
++register char *s;
++unsigned int len;
++register char *t;
++{
++  register unsigned char x;
++  register unsigned char y;
++
++  for (;;) {
++    y = *t++ - 'A';
++    if (y <= 'Z' - 'A') y += 'a'; else y += 'A';
++    if (!y) return 1;
++    if (!len) return 0;
++    --len;
++    x = *s++ - 'A';
++    if (x <= 'Z' - 'A') x += 'a'; else x += 'A';
++    if (x != y) return 0;
++  }
++}
+
+=== added file 'global.h'
+--- a/global.h	1970-01-01 00:00:00 +0000
++++ b/global.h	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,48 @@
++/* GLOBAL.H - RSAREF types and constants */
++
++#include <string.h>
++
++/* Copyright (C) RSA Laboratories, a division of RSA Data Security,
++     Inc., created 1991. All rights reserved.
++ */
++
++#ifndef _GLOBAL_H_
++#define _GLOBAL_H_ 1
++
++/* PROTOTYPES should be set to one if and only if the compiler supports
++     function argument prototyping.
++   The following makes PROTOTYPES default to 1 if it has not already been
++     defined as 0 with C compiler flags.
++ */
++#ifndef PROTOTYPES
++#define PROTOTYPES 1
++#endif
++
++/* POINTER defines a generic pointer type */
++typedef unsigned char *POINTER;
++
++/* UINT2 defines a two byte word */
++typedef unsigned short int UINT2;
++
++/* UINT4 defines a four byte word */
++typedef unsigned long int UINT4;
++
++#ifndef NULL_PTR
++#define NULL_PTR ((POINTER)0)
++#endif
++
++#ifndef UNUSED_ARG
++#define UNUSED_ARG(x) x = *(&x);
++#endif
++
++/* PROTO_LIST is defined depending on how PROTOTYPES is defined above.
++   If using PROTOTYPES, then PROTO_LIST returns the list, otherwise it
++     returns an empty list.  
++ */
++#if PROTOTYPES
++#define PROTO_LIST(list) list
++#else
++#define PROTO_LIST(list) ()
++#endif
++
++#endif /* end _GLOBAL_H_ */
+
+=== added file 'hmac_md5.c'
+--- a/hmac_md5.c	1970-01-01 00:00:00 +0000
++++ b/hmac_md5.c	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,76 @@
++#include "global.h"
++#include "md5.h"
++
++/*
++** Function: hmac_md5
++*/
++
++void hmac_md5(text, text_len, key, key_len, digest)
++unsigned char*  text;                /* pointer to data stream */
++int             text_len;            /* length of data stream */
++unsigned char*  key;                 /* pointer to authentication key */
++int             key_len;             /* length of authentication key */
++unsigned char   *digest;              /* caller digest to be filled in */
++
++{
++        MD5_CTX context;
++        unsigned char k_ipad[65];    /* inner padding -
++                                      * key XORd with ipad
++                                      */
++        unsigned char k_opad[65];    /* outer padding -
++                                      * key XORd with opad
++                                      */
++        unsigned char tk[16];
++        int i;
++        /* if key is longer than 64 bytes reset it to key=MD5(key) */
++        if (key_len > 64) {
++
++                MD5_CTX      tctx;
++
++                MD5Init(&tctx);
++                MD5Update(&tctx, key, key_len);
++                MD5Final(tk, &tctx);
++
++                key = tk;
++                key_len = 16;
++        }
++
++        /*
++         * the HMAC_MD5 transform looks like:
++         *
++         * MD5(K XOR opad, MD5(K XOR ipad, text))
++         *
++         * where K is an n byte key
++         * ipad is the byte 0x36 repeated 64 times
++         * opad is the byte 0x5c repeated 64 times
++         * and text is the data being protected
++         */
++
++        /* start out by storing key in pads */
++        bzero( k_ipad, sizeof k_ipad);
++        bzero( k_opad, sizeof k_opad);
++        bcopy( key, k_ipad, key_len);
++        bcopy( key, k_opad, key_len);
++
++        /* XOR key with ipad and opad values */
++        for (i=0; i<64; i++) {
++                k_ipad[i] ^= 0x36;
++                k_opad[i] ^= 0x5c;
++        }
++        /*
++         * perform inner MD5
++         */
++        MD5Init(&context);                   /* init context for 1st pass */
++        MD5Update(&context, k_ipad, 64);      /* start with inner pad */
++        MD5Update(&context, text, text_len); /* then text of datagram */
++        MD5Final(digest, &context);          /* finish up 1st pass */
++        /*
++         * perform outer MD5
++         */
++        MD5Init(&context);                   /* init context for 2nd
++                                              * pass */
++        MD5Update(&context, k_opad, 64);     /* start with outer pad */
++        MD5Update(&context, digest, 16);     /* then results of 1st
++                                              * hash */
++        MD5Final(digest, &context);          /* finish up 2nd pass */
++}
+
+=== added file 'hmac_md5.h'
+--- a/hmac_md5.h	1970-01-01 00:00:00 +0000
++++ b/hmac_md5.h	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,11 @@
++
++/* prototypes */
++
++void hmac_md5( unsigned char* text, int text_len, unsigned char* key, int key_len, unsigned char* digest);
++
++/* pointer to data stream */
++/* length of data stream */
++/* pointer to authentication key */
++/* length of authentication key */
++/* caller digest to be filled in */
++
+
+=== added file 'md5.h'
+--- a/md5.h	1970-01-01 00:00:00 +0000
++++ b/md5.h	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,49 @@
++/* MD5.H - header file for MD5C.C
++ */
++
++/* Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
++   rights reserved.
++
++   License to copy and use this software is granted provided that it
++   is identified as the "RSA Data Security, Inc. MD5 Message-Digest
++   Algorithm" in all material mentioning or referencing this software
++   or this function.
++
++   License is also granted to make and use derivative works provided
++   that such works are identified as "derived from the RSA Data
++   Security, Inc. MD5 Message-Digest Algorithm" in all material
++   mentioning or referencing the derived work.  
++                                                                    
++   RSA Data Security, Inc. makes no representations concerning either
++   the merchantability of this software or the suitability of this
++   software for any particular purpose. It is provided "as is"
++   without express or implied warranty of any kind.  
++                                                                    
++   These notices must be retained in any copies of any part of this
++   documentation and/or software.  
++ */
++
++#ifndef _MD5_H_
++#define _MD5_H_ 1
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* MD5 context. */
++typedef struct {
++  UINT4 state[4];                                   /* state (ABCD) */
++  UINT4 count[2];        /* number of bits, modulo 2^64 (lsb first) */
++  unsigned char buffer[64];                         /* input buffer */
++} MD5_CTX;
++
++void MD5Init PROTO_LIST ((MD5_CTX *));
++void MD5Update PROTO_LIST
++  ((MD5_CTX *, unsigned char *, unsigned int));
++void MD5Final PROTO_LIST ((unsigned char [16], MD5_CTX *));
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+
+=== added file 'md5c.c'
+--- a/md5c.c	1970-01-01 00:00:00 +0000
++++ b/md5c.c	2015-03-12 22:14:59 +0000
+@@ -0,0 +1,334 @@
++/* MD5C.C - RSA Data Security, Inc., MD5 message-digest algorithm
++ */
++
++/* Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
++   rights reserved.
++
++   License to copy and use this software is granted provided that it
++   is identified as the "RSA Data Security, Inc. MD5 Message-Digest
++   Algorithm" in all material mentioning or referencing this software
++   or this function.
++
++   License is also granted to make and use derivative works provided
++   that such works are identified as "derived from the RSA Data
++   Security, Inc. MD5 Message-Digest Algorithm" in all material
++   mentioning or referencing the derived work.  
++                                                                    
++   RSA Data Security, Inc. makes no representations concerning either
++   the merchantability of this software or the suitability of this
++   software for any particular purpose. It is provided "as is"
++   without express or implied warranty of any kind.  
++                                                                    
++   These notices must be retained in any copies of any part of this
++   documentation and/or software.  
++ */
++
++#include "global.h"
++#include "md5.h"
++
++/* Constants for MD5Transform routine.
++ */
++#define S11 7
++#define S12 12
++#define S13 17
++#define S14 22
++#define S21 5
++#define S22 9
++#define S23 14
++#define S24 20
++#define S31 4
++#define S32 11
++#define S33 16
++#define S34 23
++#define S41 6
++#define S42 10
++#define S43 15
++#define S44 21
++
++static void MD5Transform PROTO_LIST ((UINT4 [4], unsigned char [64]));
++static void Encode PROTO_LIST
++  ((unsigned char *, UINT4 *, unsigned int));
++static void Decode PROTO_LIST
++  ((UINT4 *, unsigned char *, unsigned int));
++static void MD5_memcpy PROTO_LIST ((POINTER, POINTER, unsigned int));
++static void MD5_memset PROTO_LIST ((POINTER, int, unsigned int));
++
++static unsigned char PADDING[64] = {
++  0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
++};
++
++/* F, G, H and I are basic MD5 functions.
++ */
++#define F(x, y, z) (((x) & (y)) | ((~x) & (z)))
++#define G(x, y, z) (((x) & (z)) | ((y) & (~z)))
++#define H(x, y, z) ((x) ^ (y) ^ (z))
++#define I(x, y, z) ((y) ^ ((x) | (~z)))
++
++/* ROTATE_LEFT rotates x left n bits.
++ */
++#define ROTATE_LEFT(x, n) (((x) << (n)) | ((x) >> (32-(n))))
++
++/* FF, GG, HH, and II transformations for rounds 1, 2, 3, and 4.
++   Rotation is separate from addition to prevent recomputation.
++ */
++#define FF(a, b, c, d, x, s, ac) { \
++    (a) += F ((b), (c), (d)) + (x) + (UINT4)(ac); \
++    (a) = ROTATE_LEFT ((a), (s)); \
++    (a) += (b); \
++  }
++#define GG(a, b, c, d, x, s, ac) { \
++    (a) += G ((b), (c), (d)) + (x) + (UINT4)(ac); \
++    (a) = ROTATE_LEFT ((a), (s)); \
++    (a) += (b); \
++  }
++#define HH(a, b, c, d, x, s, ac) { \
++    (a) += H ((b), (c), (d)) + (x) + (UINT4)(ac); \
++    (a) = ROTATE_LEFT ((a), (s)); \
++    (a) += (b); \
++  }
++#define II(a, b, c, d, x, s, ac) { \
++    (a) += I ((b), (c), (d)) + (x) + (UINT4)(ac); \
++    (a) = ROTATE_LEFT ((a), (s)); \
++    (a) += (b); \
++  }
++
++/* MD5 initialization. Begins an MD5 operation, writing a new context.
++ */
++void MD5Init (context)
++MD5_CTX *context;                                        /* context */
++{
++  context->count[0] = context->count[1] = 0;
++
++  /* Load magic initialization constants.
++   */
++  context->state[0] = 0x67452301;
++  context->state[1] = 0xefcdab89;
++  context->state[2] = 0x98badcfe;
++  context->state[3] = 0x10325476;
++}
++
++/* MD5 block update operation. Continues an MD5 message-digest
++     operation, processing another message block, and updating the
++     context.
++ */
++void MD5Update (context, input, inputLen)
++MD5_CTX *context;                                        /* context */
++unsigned char *input;                                /* input block */
++unsigned int inputLen;                     /* length of input block */
++{
++  unsigned int i, index, partLen;
++
++  /* Compute number of bytes mod 64 */
++  index = (unsigned int)((context->count[0] >> 3) & 0x3F);
++
++  /* Update number of bits */
++  if ((context->count[0] += ((UINT4)inputLen << 3))
++      < ((UINT4)inputLen << 3))
++    context->count[1]++;
++  context->count[1] += ((UINT4)inputLen >> 29);
++  
++  partLen = 64 - index;
++  
++  /* Transform as many times as possible.
++   */
++  if (inputLen >= partLen) {
++    MD5_memcpy
++      ((POINTER)&context->buffer[index], (POINTER)input, partLen);
++    MD5Transform (context->state, context->buffer);
++  
++    for (i = partLen; i + 63 < inputLen; i += 64)
++      MD5Transform (context->state, &input[i]);
++    
++    index = 0;
++  }
++  else
++    i = 0;
++  
++  /* Buffer remaining input */
++  MD5_memcpy 
++    ((POINTER)&context->buffer[index], (POINTER)&input[i],
++     inputLen-i);
++}
++
++/* MD5 finalization. Ends an MD5 message-digest operation, writing the
++     the message digest and zeroizing the context.
++ */
++void MD5Final (digest, context)
++unsigned char digest[16];                         /* message digest */
++MD5_CTX *context;                                       /* context */
++{
++  unsigned char bits[8];
++  unsigned int index, padLen;
++
++  /* Save number of bits */
++  Encode (bits, context->count, 8);
++
++  /* Pad out to 56 mod 64.
++   */
++  index = (unsigned int)((context->count[0] >> 3) & 0x3f);
++  padLen = (index < 56) ? (56 - index) : (120 - index);
++  MD5Update (context, PADDING, padLen);
++  
++  /* Append length (before padding) */
++  MD5Update (context, bits, 8);
++
++  /* Store state in digest */
++  Encode (digest, context->state, 16);
++  
++  /* Zeroize sensitive information.
++   */
++  MD5_memset ((POINTER)context, 0, sizeof (*context));
++}
++
++/* MD5 basic transformation. Transforms state based on block.
++ */
++static void MD5Transform (state, block)
++UINT4 state[4];
++unsigned char block[64];
++{
++  UINT4 a = state[0], b = state[1], c = state[2], d = state[3], x[16];
++  
++  Decode (x, block, 64);
++
++  /* Round 1 */
++  FF (a, b, c, d, x[ 0], S11, 0xd76aa478); /* 1 */
++  FF (d, a, b, c, x[ 1], S12, 0xe8c7b756); /* 2 */
++  FF (c, d, a, b, x[ 2], S13, 0x242070db); /* 3 */
++  FF (b, c, d, a, x[ 3], S14, 0xc1bdceee); /* 4 */
++  FF (a, b, c, d, x[ 4], S11, 0xf57c0faf); /* 5 */
++  FF (d, a, b, c, x[ 5], S12, 0x4787c62a); /* 6 */
++  FF (c, d, a, b, x[ 6], S13, 0xa8304613); /* 7 */
++  FF (b, c, d, a, x[ 7], S14, 0xfd469501); /* 8 */
++  FF (a, b, c, d, x[ 8], S11, 0x698098d8); /* 9 */
++  FF (d, a, b, c, x[ 9], S12, 0x8b44f7af); /* 10 */
++  FF (c, d, a, b, x[10], S13, 0xffff5bb1); /* 11 */
++  FF (b, c, d, a, x[11], S14, 0x895cd7be); /* 12 */
++  FF (a, b, c, d, x[12], S11, 0x6b901122); /* 13 */
++  FF (d, a, b, c, x[13], S12, 0xfd987193); /* 14 */
++  FF (c, d, a, b, x[14], S13, 0xa679438e); /* 15 */
++  FF (b, c, d, a, x[15], S14, 0x49b40821); /* 16 */
++
++  /* Round 2 */
++  GG (a, b, c, d, x[ 1], S21, 0xf61e2562); /* 17 */
++  GG (d, a, b, c, x[ 6], S22, 0xc040b340); /* 18 */
++  GG (c, d, a, b, x[11], S23, 0x265e5a51); /* 19 */
++  GG (b, c, d, a, x[ 0], S24, 0xe9b6c7aa); /* 20 */
++  GG (a, b, c, d, x[ 5], S21, 0xd62f105d); /* 21 */
++  GG (d, a, b, c, x[10], S22,  0x2441453); /* 22 */
++  GG (c, d, a, b, x[15], S23, 0xd8a1e681); /* 23 */
++  GG (b, c, d, a, x[ 4], S24, 0xe7d3fbc8); /* 24 */
++  GG (a, b, c, d, x[ 9], S21, 0x21e1cde6); /* 25 */
++  GG (d, a, b, c, x[14], S22, 0xc33707d6); /* 26 */
++  GG (c, d, a, b, x[ 3], S23, 0xf4d50d87); /* 27 */
++  GG (b, c, d, a, x[ 8], S24, 0x455a14ed); /* 28 */
++  GG (a, b, c, d, x[13], S21, 0xa9e3e905); /* 29 */
++  GG (d, a, b, c, x[ 2], S22, 0xfcefa3f8); /* 30 */
++  GG (c, d, a, b, x[ 7], S23, 0x676f02d9); /* 31 */
++  GG (b, c, d, a, x[12], S24, 0x8d2a4c8a); /* 32 */
++
++  /* Round 3 */
++  HH (a, b, c, d, x[ 5], S31, 0xfffa3942); /* 33 */
++  HH (d, a, b, c, x[ 8], S32, 0x8771f681); /* 34 */
++  HH (c, d, a, b, x[11], S33, 0x6d9d6122); /* 35 */
++  HH (b, c, d, a, x[14], S34, 0xfde5380c); /* 36 */
++  HH (a, b, c, d, x[ 1], S31, 0xa4beea44); /* 37 */
++  HH (d, a, b, c, x[ 4], S32, 0x4bdecfa9); /* 38 */
++  HH (c, d, a, b, x[ 7], S33, 0xf6bb4b60); /* 39 */
++  HH (b, c, d, a, x[10], S34, 0xbebfbc70); /* 40 */
++  HH (a, b, c, d, x[13], S31, 0x289b7ec6); /* 41 */
++  HH (d, a, b, c, x[ 0], S32, 0xeaa127fa); /* 42 */
++  HH (c, d, a, b, x[ 3], S33, 0xd4ef3085); /* 43 */
++  HH (b, c, d, a, x[ 6], S34,  0x4881d05); /* 44 */
++  HH (a, b, c, d, x[ 9], S31, 0xd9d4d039); /* 45 */
++  HH (d, a, b, c, x[12], S32, 0xe6db99e5); /* 46 */
++  HH (c, d, a, b, x[15], S33, 0x1fa27cf8); /* 47 */
++  HH (b, c, d, a, x[ 2], S34, 0xc4ac5665); /* 48 */
++
++  /* Round 4 */
++  II (a, b, c, d, x[ 0], S41, 0xf4292244); /* 49 */
++  II (d, a, b, c, x[ 7], S42, 0x432aff97); /* 50 */
++  II (c, d, a, b, x[14], S43, 0xab9423a7); /* 51 */
++  II (b, c, d, a, x[ 5], S44, 0xfc93a039); /* 52 */
++  II (a, b, c, d, x[12], S41, 0x655b59c3); /* 53 */
++  II (d, a, b, c, x[ 3], S42, 0x8f0ccc92); /* 54 */
++  II (c, d, a, b, x[10], S43, 0xffeff47d); /* 55 */
++  II (b, c, d, a, x[ 1], S44, 0x85845dd1); /* 56 */
++  II (a, b, c, d, x[ 8], S41, 0x6fa87e4f); /* 57 */
++  II (d, a, b, c, x[15], S42, 0xfe2ce6e0); /* 58 */
++  II (c, d, a, b, x[ 6], S43, 0xa3014314); /* 59 */
++  II (b, c, d, a, x[13], S44, 0x4e0811a1); /* 60 */
++  II (a, b, c, d, x[ 4], S41, 0xf7537e82); /* 61 */
++  II (d, a, b, c, x[11], S42, 0xbd3af235); /* 62 */
++  II (c, d, a, b, x[ 2], S43, 0x2ad7d2bb); /* 63 */
++  II (b, c, d, a, x[ 9], S44, 0xeb86d391); /* 64 */
++
++  state[0] += a;
++  state[1] += b;
++  state[2] += c;
++  state[3] += d;
++  
++  /* Zeroize sensitive information.
++   */
++  MD5_memset ((POINTER)x, 0, sizeof (x));
++}
++
++/* Encodes input (UINT4) into output (unsigned char). Assumes len is
++     a multiple of 4.
++ */
++static void Encode (output, input, len)
++unsigned char *output;
++UINT4 *input;
++unsigned int len;
++{
++  unsigned int i, j;
++
++  for (i = 0, j = 0; j < len; i++, j += 4) {
++    output[j] = (unsigned char)(input[i] & 0xff);
++    output[j+1] = (unsigned char)((input[i] >> 8) & 0xff);
++    output[j+2] = (unsigned char)((input[i] >> 16) & 0xff);
++    output[j+3] = (unsigned char)((input[i] >> 24) & 0xff);
++  }
++}
++
++/* Decodes input (unsigned char) into output (UINT4). Assumes len is
++     a multiple of 4.
++ */
++static void Decode (output, input, len)
++UINT4 *output;
++unsigned char *input;
++unsigned int len;
++{
++  unsigned int i, j;
++
++  for (i = 0, j = 0; j < len; i++, j += 4)
++    output[i] = ((UINT4)input[j]) | (((UINT4)input[j+1]) << 8) |
++      (((UINT4)input[j+2]) << 16) | (((UINT4)input[j+3]) << 24);
++}
++
++/* Note: Replace "for loop" with standard memcpy if possible.
++ */
++static void MD5_memcpy (output, input, len)
++POINTER output;
++POINTER input;
++unsigned int len;
++{
++  unsigned int i;
++  
++  for (i = 0; i < len; i++)
++    output[i] = input[i];
++}
++
++/* Note: Replace "for loop" with standard memset if possible.
++ */
++static void MD5_memset (output, value, len)
++POINTER output;
++int value;
++unsigned int len;
++{
++  unsigned int i;
++  
++  for (i = 0; i < len; i++)
++    ((char *)output)[i] = (char)value;
++}
+
+=== modified file 'qmail-control.9'
+--- a/qmail-control.9	2010-03-18 22:38:02 +0000
++++ b/qmail-control.9	2015-03-12 22:14:59 +0000
+@@ -40,6 +40,7 @@
+ .ta 5c 10c
+ control	default	used by
+ 
++.I authsender	\fR(none)	\fRqmail-remote
+ .I badmailfrom	\fR(none)	\fRqmail-smtpd
+ .I bouncefrom	\fRMAILER-DAEMON	\fRqmail-send
+ .I bouncehost	\fIme	\fRqmail-send
+
+=== modified file 'qmail-remote.8'
+--- a/qmail-remote.8	2010-03-18 22:38:02 +0000
++++ b/qmail-remote.8	2015-03-12 22:14:59 +0000
+@@ -53,6 +53,7 @@
+ and does not follow the
+ .B getopt
+ standard.
++
+ .SH TRANSPARENCY
+ End-of-file in SMTP is encoded as dot CR LF.
+ A dot at the beginning of a line is encoded as dot dot.
+@@ -100,6 +101,73 @@
+ After this letter comes a human-readable description of
+ what happened.
+ 
++.B qmail-remote
++may use SMTP Authenticaton of type CRAM-MD4, PLAIN, or LOGIN
++(in this order) to connect to remote hosts.
++The following reports are provided:
++.TP 5
++K
++no supported AUTH method found, continuing without authentication.
++.TP 5
++Z
++Connected to 
++.I host
++but authentication was rejected (AUTH PLAIN).
++.TP 5
++Z
++Connected to 
++.I host 
++but unable to base64encode (plain).
++.TP 5
++Z
++Connected to 
++.I host
++but authentication was rejected (plain)."
++.TP 5
++Z
++Connected to
++.I host
++but authentication was rejected (AUTH LOGIN).
++.TP 5
++Z
++Connected to 
++.I host
++but unable to base64encode user.
++.TP 5
++Z
++Connected to 
++.I host 
++but authentication was rejected (username).
++.TP 5
++Z
++Connected to 
++.I host 
++but unable to base64encode pass.
++.TP 5
++Z
++Connected to
++.I host
++but authentication was rejected (AUTH CRAM-MD5).
++Z
++Connected to 
++.I host
++but unable to base64decode challenge.
++.TP 5
++Z
++Connected to 
++.I host
++but unable to base64encode username+digest.
++.TP 5
++Z
++Connected to 
++.I host 
++but password expired.
++.TP 5
++Z
++Connected to 
++.I host 
++but authentication was rejected (username+digest).
++.PP
+ The recipient reports will always be printed in the same order as
+ .BR qmail-remote 's
+ .I recip
+@@ -114,6 +182,51 @@
+ always exits zero.
+ .SH "CONTROL FILES"
+ .TP 5
++.I authsenders
++Authenticated sender.
++For each
++.I sender 
++included in 
++.IR authsenders :
++.I sender\fB:\fIrelay\fB:\fIport\fB|\fIuser\fB|\fIpassword 
++.B qmail-remote
++will try SMTP Authentication 
++of type CRAM-MD5, LOGIN, or PLAIN 
++with the provided user name
++.I user 
++and password
++.I password 
++(the authentication information) 
++and eventually relay the 
++mail through
++.I relay
++on port
++.IR port .
++The use of 
++.I relay
++and 
++.I port 
++follows the same rules as for
++.IR smtproutes 
++Note: In case
++.I sender
++is empty, 
++.B qmail-remote
++will try to deliver each outgoing mail 
++SMTP authenticated. If the authentication
++information is missing, the mail is 
++delivered none-authenticated.
++.I authsenders
++can be constructed as follows:
++
++.EX
++   @example.com|generic|passwd
++   .subdomain.example.com|other|otherpw
++   mail@example.com|test|testpass
++   info@example.com:smtp.example.com:26|other|otherpw
++   :mailrelay.example.com:587|e=mc2|testpass
++.EE
++.TP 5
+ .I helohost
+ Current host name,
+ for use solely in saying hello to the remote SMTP server.
+@@ -128,7 +241,9 @@
+ Artificial SMTP routes.
+ Each route has the form
+ .IR domain\fB:\fIrelay ,
+-without any extra spaces.
++or 
++.IR domain\fB:\fIrelay\fB|\fIuser\fB|\fIpassword
++in case of authenticated routes without any extra spaces.
+ If
+ .I domain
+ matches
+@@ -149,6 +264,7 @@
+ 
+ .EX
+    inside.af.mil:firewall.af.mil:26
++  :submission.myrelay.com:587|myuserid|mypasswd
+ .EE
+ 
+ .I relay
+@@ -177,11 +293,15 @@
+ The
+ .B qmail
+ system does not protect you if you create an artificial
+-mail loop between machines.
++mail loop between machines. 
+ However,
+ you are always safe using
+ .I smtproutes
+ if you do not accept mail from the network.
++Note:   
++.I authsender 
++routes have precedence over
++.IR smtproutes .
+ .TP 5
+ .I timeoutconnect
+ Number of seconds
+
+=== modified file 'qmail-remote.c'
+--- a/qmail-remote.c	2010-03-18 22:38:02 +0000
++++ b/qmail-remote.c	2015-03-12 22:14:59 +0000
+@@ -28,6 +28,7 @@
+ #include "timeoutconn.h"
+ #include "timeoutread.h"
+ #include "timeoutwrite.h"
++#include "base64.h"
+ 
+ #define HUGESMTPTEXT 5000
+ 
+@@ -44,6 +45,16 @@
+ stralloc host = {0};
+ stralloc sender = {0};
+ 
++stralloc authsenders = {0};
++struct constmap mapauthsenders;
++stralloc user = {0};
++stralloc pass = {0};
++stralloc auth = {0};
++stralloc plain = {0};
++stralloc chal  = {0};
++stralloc slop  = {0};
++char *authsender;
++
+ saa reciplist = {0};
+ 
+ struct ip_address partner;
+@@ -86,6 +97,12 @@
+ it isn't in my control/locals file, so I don't treat it as local. (#5.4.6)\n");
+ zerodie(); }
+ 
++void err_authprot() {
++  out("Kno supported AUTH method found, continuing without authentication.\n");
++  zero();
++  substdio_flush(subfdoutsmall);
++}
++
+ void outhost()
+ {
+   char x[IPFMT];
+@@ -216,24 +233,192 @@
+ 
+ stralloc recip = {0};
+ 
++void mailfrom()
++{
++  substdio_puts(&smtpto,"MAIL FROM:<");
++  substdio_put(&smtpto,sender.s,sender.len);
++  substdio_puts(&smtpto,">\r\n");
++  substdio_flush(&smtpto);
++}
++
++stralloc xuser = {0};
++
++int xtext(sa,s,len)
++stralloc *sa;
++char *s;
++int len;
++{
++  int i;
++
++  if(!stralloc_copys(sa,"")) temp_nomem();
++  
++  for (i = 0; i < len; i++) {
++    if (s[i] == '=') {
++      if (!stralloc_cats(sa,"+3D")) temp_nomem();
++    } else if (s[i] == '+') {  
++        if (!stralloc_cats(sa,"+2B")) temp_nomem(); 
++    } else if ((int) s[i] < 33 || (int) s[i] > 126) {
++        if (!stralloc_cats(sa,"+3F")) temp_nomem(); /* ok. not correct */
++    } else if (!stralloc_catb(sa,s+i,1)) {
++        temp_nomem();
++    }
++  }
++
++  return sa->len;
++}
++
++void mailfrom_xtext()
++{
++  if (!xtext(&xuser,user.s,user.len)) temp_nomem();
++  substdio_puts(&smtpto,"MAIL FROM:<");
++  substdio_put(&smtpto,sender.s,sender.len);
++  substdio_puts(&smtpto,"> AUTH=");
++  substdio_put(&smtpto,xuser.s,xuser.len);
++  substdio_puts(&smtpto,"\r\n");
++  substdio_flush(&smtpto);
++}
++
++int mailfrom_plain()
++{
++  substdio_puts(&smtpto,"AUTH PLAIN\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() != 334) { quit("ZConnected to "," but authentication was rejected (AUTH PLAIN)."); return -1; }
++
++  if (!stralloc_cat(&plain,&user)) temp_nomem(); /* <authorization-id> */
++  if (!stralloc_0(&plain)) temp_nomem();
++  if (!stralloc_cat(&plain,&user)) temp_nomem(); /* <authentication-id> */
++  if (!stralloc_0(&plain)) temp_nomem();
++  if (!stralloc_cat(&plain,&pass)) temp_nomem(); /* password */
++  if (b64encode(&plain,&auth)) quit("ZConnected to "," but unable to base64encode (plain).");
++  substdio_put(&smtpto,auth.s,auth.len);
++  substdio_puts(&smtpto,"\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() == 235) { mailfrom_xtext(); return 0; }
++  else if (smtpcode() == 432) { quit("ZConnected to "," but password expired."); return 1; }
++  else { quit("ZConnected to "," but authentication was rejected (plain)."); return 1; }
++  
++  return 0;
++}
++
++int mailfrom_login()
++{
++  substdio_puts(&smtpto,"AUTH LOGIN\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() != 334) { quit("ZConnected to "," but authentication was rejected (AUTH LOGIN)."); return -1; }
++
++  if (!stralloc_copys(&auth,"")) temp_nomem();
++  if (b64encode(&user,&auth)) quit("ZConnected to "," but unable to base64encode user.");
++  substdio_put(&smtpto,auth.s,auth.len);
++  substdio_puts(&smtpto,"\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() != 334) quit("ZConnected to "," but authentication was rejected (username).");
++
++  if (!stralloc_copys(&auth,"")) temp_nomem();
++  if (b64encode(&pass,&auth)) quit("ZConnected to "," but unable to base64encode pass.");
++  substdio_put(&smtpto,auth.s,auth.len);
++  substdio_puts(&smtpto,"\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() == 235) { mailfrom_xtext(); return 0; }
++  else if (smtpcode() == 432) { quit("ZConnected to "," but password expired."); return 1; }
++  else { quit("ZConnected to "," but authentication was rejected (password)."); return 1; }
++}
++
++int mailfrom_cram()
++{
++  int j;
++  unsigned char h;
++  unsigned char digest[16];
++  unsigned char digascii[33];
++  static char hextab[]="0123456789abcdef";
++
++  substdio_puts(&smtpto,"AUTH CRAM-MD5\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() != 334) { quit("ZConnected to "," but authentication was rejected (AUTH CRAM-MD5)."); return -1; }
++
++  if (str_chr(smtptext.s+4,' ')) { 			/* Challenge */
++    if(!stralloc_copys(&slop,"")) temp_nomem();
++    if (!stralloc_copyb(&slop,smtptext.s+4,smtptext.len-5)) temp_nomem();
++    if (b64decode(slop.s,slop.len,&chal)) quit("ZConnected to "," but unable to base64decode challenge.");
++  }
++   
++  hmac_md5(chal.s,chal.len,pass.s,pass.len,digest);
++
++  for (j = 0;j < 16;j++)				/* HEX => ASCII */
++  {
++    digascii[2*j] = hextab[digest[j] >> 4];  
++    digascii[2*j+1] = hextab[digest[j] & 0xf]; 
++  }
++  digascii[32]=0;
++
++  slop.len = 0;
++  if (!stralloc_copys(&slop,"")) temp_nomem();
++  if (!stralloc_cat(&slop,&user)) temp_nomem();		 /* user-id */
++  if (!stralloc_cats(&slop," ")) temp_nomem();
++  if (!stralloc_catb(&slop,digascii,32)) temp_nomem();   /* digest */ 
++
++  if (!stralloc_copys(&auth,"")) temp_nomem();
++  if (b64encode(&slop,&auth)) quit("ZConnected to "," but unable to base64encode username+digest.");
++  substdio_put(&smtpto,auth.s,auth.len);
++  substdio_puts(&smtpto,"\r\n");
++  substdio_flush(&smtpto);
++  if (smtpcode() == 235) { mailfrom_xtext(); return 0; }
++  else if (smtpcode() == 432) { quit("ZConnected to "," but password expired."); return 1; }
++  else { quit("ZConnected to "," but authentication was rejected (username+digest)."); return 1; } 
++}
++
++void smtp_auth()
++{
++  int i, j; 
++
++  for (i = 0; i + 8 < smtptext.len; i += str_chr(smtptext.s+i,'\n')+1)
++    if (!str_diffn(smtptext.s+i+4,"AUTH",4)) {  
++      if (j = str_chr(smtptext.s+i+8,'C') > 0)
++        if (case_starts(smtptext.s+i+8+j,"CRAM"))
++          if (mailfrom_cram() >= 0) return;
++
++      if (j = str_chr(smtptext.s+i+8,'P') > 0)
++        if (case_starts(smtptext.s+i+8+j,"PLAIN")) 
++          if (mailfrom_plain() >= 0) return;
++
++      if (j = str_chr(smtptext.s+i+8,'L') > 0)
++        if (case_starts(smtptext.s+i+8+j,"LOGIN")) 
++          if (mailfrom_login() >= 0) return;
++
++      err_authprot();
++      mailfrom();
++    }
++}
++
+ void smtp()
+ {
+   unsigned long code;
+   int flagbother;
+   int i;
+  
+-  if (smtpcode() != 220) quit("ZConnected to "," but greeting failed");
++  code = smtpcode();
++  if (code >= 500) quit("DConnected to "," but greeting failed");
++  if (code != 220) quit("ZConnected to "," but greeting failed");
+  
+-  substdio_puts(&smtpto,"HELO ");
++  substdio_puts(&smtpto,"EHLO ");
+   substdio_put(&smtpto,helohost.s,helohost.len);
+   substdio_puts(&smtpto,"\r\n");
+   substdio_flush(&smtpto);
+-  if (smtpcode() != 250) quit("ZConnected to "," but my name was rejected");
+- 
+-  substdio_puts(&smtpto,"MAIL FROM:<");
+-  substdio_put(&smtpto,sender.s,sender.len);
+-  substdio_puts(&smtpto,">\r\n");
+-  substdio_flush(&smtpto);
++
++  if (smtpcode() != 250) {
++    substdio_puts(&smtpto,"HELO ");
++    substdio_put(&smtpto,helohost.s,helohost.len);
++    substdio_puts(&smtpto,"\r\n");
++    substdio_flush(&smtpto);
++    code = smtpcode();
++    if (code >= 500) quit("DConnected to "," but my name was rejected");
++    if (code != 250) quit("ZConnected to "," but my name was rejected");
++  }
++
++  if (user.len && pass.len)
++    smtp_auth();
++  else 
++    mailfrom();
++
+   code = smtpcode();
+   if (code >= 500) quit("DConnected to "," but sender was rejected");
+   if (code >= 400) quit("ZConnected to "," but sender was rejected");
+@@ -324,48 +509,102 @@
+     case 1:
+       if (!constmap_init(&maproutes,routes.s,routes.len,1)) temp_nomem(); break;
+   }
++  
++  switch(control_readfile(&authsenders,"control/authsenders",0)) {
++    case -1:
++       temp_control();
++    case 0:
++      if (!constmap_init(&mapauthsenders,"",0,1)) temp_nomem(); break;
++    case 1:
++      if (!constmap_init(&mapauthsenders,authsenders.s,authsenders.len,1)) temp_nomem(); break;
++  }
+ }
+ 
+-void main(argc,argv)
++int main(argc,argv)
+ int argc;
+ char **argv;
+ {
+   static ipalloc ip = {0};
+-  int i;
++  int i, j;
+   unsigned long random;
+   char **recips;
+   unsigned long prefme;
+   int flagallaliases;
+   int flagalias;
+   char *relayhost;
+- 
++   
+   sig_pipeignore();
+   if (argc < 4) perm_usage();
+   if (chdir(auto_qmail) == -1) temp_chdir();
+   getcontrols();
+  
+- 
+   if (!stralloc_copys(&host,argv[1])) temp_nomem();
+- 
++
++  authsender = 0;
+   relayhost = 0;
+-  for (i = 0;i <= host.len;++i)
+-    if ((i == 0) || (i == host.len) || (host.s[i] == '.'))
+-      if (relayhost = constmap(&maproutes,host.s + i,host.len - i))
++
++  addrmangle(&sender,argv[2],&flagalias,0);
++
++  for (i = 0;i <= sender.len;++i)
++    if ((i == 0) || (i == sender.len) || (sender.s[i] == '.') || (sender.s[i] == '@'))
++      if (authsender = constmap(&mapauthsenders,sender.s + i,sender.len - i))
+         break;
+-  if (relayhost && !*relayhost) relayhost = 0;
+- 
+-  if (relayhost) {
+-    i = str_chr(relayhost,':');
+-    if (relayhost[i]) {
+-      scan_ulong(relayhost + i + 1,&port);
+-      relayhost[i] = 0;
+-    }
+-    if (!stralloc_copys(&host,relayhost)) temp_nomem();
+-  }
+-
+-
+-  addrmangle(&sender,argv[2],&flagalias,0);
+- 
++
++  if (authsender && !*authsender) authsender = 0;
++
++  if (authsender) {
++    i = str_chr(authsender,'|');
++    if (authsender[i]) {
++      j = str_chr(authsender + i + 1,'|');
++      if (authsender[j]) {
++        authsender[i] = 0;
++        authsender[i + j + 1] = 0;
++        if (!stralloc_copys(&user,"")) temp_nomem();
++        if (!stralloc_copys(&user,authsender + i + 1)) temp_nomem();
++        if (!stralloc_copys(&pass,"")) temp_nomem();
++        if (!stralloc_copys(&pass,authsender + i + j + 2)) temp_nomem();
++      }
++    }
++    i = str_chr(authsender,':');
++    if (authsender[i]) {
++      scan_ulong(authsender + i + 1,&port);
++      authsender[i] = 0;
++    }
++
++    if (!stralloc_copys(&relayhost,authsender)) temp_nomem();
++    if (!stralloc_copys(&host,authsender)) temp_nomem();
++
++  }
++  else {					/* default smtproutes -- authenticated */
++    for (i = 0;i <= host.len;++i)
++      if ((i == 0) || (i == host.len) || (host.s[i] == '.'))
++        if (relayhost = constmap(&maproutes,host.s + i,host.len - i))
++          break;
++
++    if (relayhost && !*relayhost) relayhost = 0;
++
++    if (relayhost) {
++      i = str_chr(relayhost,'|');
++      if (relayhost[i]) {
++        j = str_chr(relayhost + i + 1,'|');
++        if (relayhost[j]) {
++          relayhost[i] = 0;
++          relayhost[i + j + 1] = 0;
++          if (!stralloc_copys(&user,"")) temp_nomem();
++          if (!stralloc_copys(&user,relayhost + i + 1)) temp_nomem();
++          if (!stralloc_copys(&pass,"")) temp_nomem();
++          if (!stralloc_copys(&pass,relayhost + i + j + 2)) temp_nomem();
++        }
++      }
++      i = str_chr(relayhost,':');
++      if (relayhost[i]) {
++        scan_ulong(relayhost + i + 1,&port);
++        relayhost[i] = 0;
++      }
++      if (!stralloc_copys(&host,relayhost)) temp_nomem();
++    }
++  }
++
+   if (!saa_readyplus(&reciplist,0)) temp_nomem();
+   if (ipme_init() != 1) temp_oserr();
+  
+
+=== modified file 'qmail-showctl.c'
+--- a/qmail-showctl.c	2010-03-18 22:38:02 +0000
++++ b/qmail-showctl.c	2015-03-12 22:14:59 +0000
+@@ -214,6 +214,7 @@
+     _exit(111);
+   }
+ 
++  do_lst("authsenders","No authenticated SMTP sender.","Authenicated SMTP sender: ","");
+   do_lst("badmailfrom","Any MAIL FROM is allowed.",""," not accepted in MAIL FROM.");
+   do_str("bouncefrom",0,"MAILER-DAEMON","Bounce user name is ");
+   do_str("bouncehost",1,"bouncehost","Bounce host name is ");
+@@ -265,8 +266,7 @@
+   while (d = readdir(dir)) {
+     if (str_equal(d->d_name,".")) continue;
+     if (str_equal(d->d_name,"..")) continue;
+-    if (str_equal(d->d_name,"bouncefrom")) continue;
+-    if (str_equal(d->d_name,"bouncehost")) continue;
++    if (str_equal(d->d_name,"authsenders")) continue;
+     if (str_equal(d->d_name,"badmailfrom")) continue;
+     if (str_equal(d->d_name,"bouncefrom")) continue;
+     if (str_equal(d->d_name,"bouncehost")) continue;
+
+=== modified file 'qmail-smtpd.8'
+--- a/qmail-smtpd.8	2015-03-12 22:14:34 +0000
++++ b/qmail-smtpd.8	2015-03-12 22:14:59 +0000
+@@ -23,7 +23,30 @@
+ header fields.
+ 
+ .B qmail-smtpd
+-supports ESMTP, including the 8BITMIME and PIPELINING options.
++supports ESMTP, including the 8BITMIME, DATA, PIPELINING, SIZE, and AUTH options.
++.B qmail-smtpd
++includes a \'MAIL FROM:\' parameter parser and obeys \'Auth\' and \'Size\' advertisements.
++.B qmail-smtpd
++can accept LOGIN, PLAIN, and CRAM-MD5 AUTH types. It invokes
++.IR checkprogram ,
++which reads on file descriptor 3 the username, a 0 byte, the password
++or CRAM-MD5 digest/response derived from the SMTP client,
++another 0 byte, a CRAM-MD5 challenge (if applicable to the AUTH type),
++and a final 0 byte.
++.I checkprogram
++invokes
++.I subprogram
++upon successful authentication, which should in turn return 0 to
++.BR qmail-smtpd ,
++effectively setting the environment variables $RELAYCLIENT and $TCPREMOTEINFO
++(any supplied value replaced with the authenticated username).
++.B qmail-smtpd
++will reject the authentication attempt if it receives a nonzero return
++value from
++.I checkprogram
++or
++.IR subprogram .
++
+ .SH TRANSPARENCY
+ .B qmail-smtpd
+ converts the SMTP newline convention into the UNIX newline convention
+@@ -169,6 +192,67 @@
+ .B qmail-smtpd
+ will wait for each new buffer of data from the remote SMTP client.
+ Default: 1200.
++
++.SH "ENVIRONMENT VARIABLES READ"
++Environment variables may be defined globally in the
++.B qmail-smtpd
++startup script and/or individually as part of the
++.B tcpserver's
++cdb database.
++The environment variables may be quoted ("variable", or 'variable') and
++in case of global use, have to be exported.
++.B qmail-smtpd
++supports the following legacy environment variables, typically
++provided by
++.B tcpserver
++or
++.B sslserver
++or
++.BR tcp-env :
++.IR TCPREMOTEIP ,
++.IR TCPREMOTEHOST
++.IR TCPREMOTEINFO
++and
++.IR TCPLOCALPORT
++as well as
++.IR RELAYCLIENT .
++
++.B qmail-smtpd
++may use the following environment variables for SMTP authentication:
++.TP 5
++.IR SMTPAUTH
++is used to enable SMTP Authentication for the AUTH types
++LOGIN and PLAIN.
++In case
++.TP 5
++.IR SMTPAUTH='+cram'
++is defined,
++.B qmail-smtpd
++honors LOGIN, PLAIN, and additionally CRAM-MD5 authentication.
++Simply 
++.TP 5
++.IR SMTPAUTH='cram'
++restricts authentication just to CRAM-MD5.
++If however
++.TP 5
++.IR SMTPAUTH='!'
++starts with an exclamation mark, AUTH is required. 
++You can enforce 'Submission' using this option 
++and binding
++.B qmail-smtpd
++to the SUBMISSION port \'587'\.
++In particular,
++.TP 5
++.IR SMTPAUTH='!cram'
++may be useful.
++In opposite, if
++.TP 5
++.IR SMTPAUTH='-'
++starts with a dash, AUTH is disabled for particular
++connections.
++
++Note: The use of 'cram' requires a CRAM-MD5 enabled PAM.
++
+ .SH "RECIPIENT VERIFICATION"
+ Recipient verification is enabled with the
+ .B VERIFY
+
+=== modified file 'qmail-smtpd.c'
+--- a/qmail-smtpd.c	2015-03-12 22:14:34 +0000
++++ b/qmail-smtpd.c	2015-03-12 22:15:11 +0000
+@@ -25,6 +25,9 @@
+ #include "commands.h"
+ #include "errbits.h"
+ #include "verifyrcpt.h"
++#include "wait.h"
++
++#define AUTHSLEEP 5
+ 
+ #define enew()	{ eout("qmail-smtpd: pid "); epid(); eout3(" from ",remoteip,": "); }
+ /* Or if you prefer shorter log messages (deduce IP from tcpserver PID entry), */
+@@ -33,17 +36,22 @@
+ unsigned int databytes = 0;
+ int timeout = 1200;
+ 
++char *protocol;
+ char *remoteip="(not yet set)";
+ char *remotehost;
+ char *remoteinfo;
+ char *local;
++char *localport;
+ char *relayclient;
++char *auth;
+ char *verify;
+ int verifydefer=0;
+ 
+ stralloc mailfrom = {0};
+ stralloc rcptto = {0};
+ int rcptcount;
++stralloc fuser = {0};
++stralloc mfparms = {0};
+ stralloc addr = {0}; /* will be 0-terminated, if addrparse returns 1 */
+ 
+ int safewrite(fd,buf,len) int fd; char *buf; int len;
+@@ -150,6 +158,57 @@
+   enew(); eout("qqt failure\n"); eflush();
+   out("451 qqt failure (#4.3.0)\r\n");
+ }
++int err_child() {
++  enew(); eout("auth - problem with child\n"); eflush();
++  out("454 oops, problem with child and I can't auth (#4.3.0)\r\n");
++  return -1;
++}
++int err_fork() {
++  enew(); eout("auth - child won't start\n"); eflush();
++  out("454 oops, child won't start and I can't auth (#4.3.0)\r\n");
++  return -1;
++}
++int err_pipe() {
++  enew(); eout("auth - can't open pipe\n"); eflush();
++  out("454 oops, unable to open pipe and I can't auth (#4.3.0)\r\n");
++  return -1;
++}
++int err_write() {
++  enew(); eout("auth - can't write to pipe\n"); eflush();
++  out("454 oops, unable to write pipe and I can't auth (#4.3.0)\r\n");
++  return -1;
++}
++void err_authd() {
++  enew(); eout("auth - already authenticated\n"); eflush();
++  out("503 you're already authenticated (#5.5.0)\r\n");
++}
++void err_authmail() {
++  enew(); eout("auth - no auth during mail transaction\n"); eflush();
++  out("503 no auth during mail transaction (#5.5.0)\r\n");
++}
++int err_noauth() {
++  enew(); eout("auth - type unimplemented\n"); eflush();
++  out("504 auth type unimplemented (#5.5.1)\r\n");
++  return -1;
++}
++int err_authabrt() {
++  enew(); eout("auth - exchange cancelled\n"); eflush();
++  out("501 auth exchange canceled (#5.0.0)\r\n");
++  return -1;
++}
++int err_input() {
++  enew(); eout("auth - malformed input\n"); eflush();
++  out("501 malformed auth input (#5.5.4)\r\n");
++  return -1;
++}
++void err_authfail() {
++  enew(); eout("auth - authentication failed\n"); eflush();
++  out("535 authentication failed (#5.7.1)\r\n");
++}
++void err_submission() {
++  enew(); eout("auth - authorization required\n"); eflush();
++  out("530 Authorization required (#5.7.1) \r\n");
++}
+ void err_hops()
+ {
+   enew(); eout("Exceeded hop count\n"); eflush();
+@@ -213,6 +272,7 @@
+   fakehelo = case_diffs(remotehost,helohost.s) ? helohost.s : 0;
+ }
+ 
++int smtpauth = 0;
+ int liphostok = 0;
+ stralloc liphost = {0};
+ int bmfok = 0;
+@@ -231,7 +291,6 @@
+   if (liphostok == -1) die_control();
+   if (control_readint(&timeout,"control/timeoutsmtpd") == -1) die_control();
+   if (timeout <= 0) timeout = 1;
+-
+   if (rcpthosts_init() == -1) die_control();
+ 
+   bmfok = control_readfile(&bmf,"control/badmailfrom",0);
+@@ -244,15 +303,31 @@
+   if (x) { scan_ulong(x,&u); databytes = u; }
+   if (!(databytes + 1)) --databytes;
+  
++  protocol = "SMTP";
+   remoteip = env_get("TCPREMOTEIP");
+   if (!remoteip) remoteip = "unknown";
+   local = env_get("TCPLOCALHOST");
+   if (!local) local = env_get("TCPLOCALIP");
+   if (!local) local = "unknown";
++  localport = env_get("TCPLOCALPORT");
++  if (!localport) localport = "0";
+   remotehost = env_get("TCPREMOTEHOST");
+   if (!remotehost) remotehost = "unknown";
+   remoteinfo = env_get("TCPREMOTEINFO");
+   relayclient = env_get("RELAYCLIENT");
++
++  auth = env_get("SMTPAUTH");
++  if (auth) {
++    smtpauth = 1;
++    case_lowers(auth);
++    if (!case_diffs(auth,"-")) smtpauth = 0;
++    if (!case_diffs(auth,"!")) smtpauth = 11;
++    if (case_starts(auth,"cram")) smtpauth = 2;
++    if (case_starts(auth,"+cram")) smtpauth = 3;
++    if (case_starts(auth,"!cram")) smtpauth = 12;
++    if (case_starts(auth,"!+cram")) smtpauth = 13;
++  }
++
+   verify =  env_get("VERIFY");
+   if (verify)
+   {
+@@ -269,7 +344,6 @@
+   enew(); eout("New session\n"); eflush();
+ }
+ 
+-
+ int addrparse(arg)
+ char *arg;
+ {
+@@ -364,8 +438,67 @@
+   return 0;
+ }
+ 
++int seenauth = 0;
+ int seenmail = 0;
+ int flagbarf; /* defined if seenmail */
++int flagsize;
++
++int mailfrom_size(arg) char *arg;
++{
++  long r;
++  unsigned long sizebytes = 0;
++
++  scan_ulong(arg,&r);
++  sizebytes = r;
++  if (databytes) if (sizebytes > databytes) return 1;
++  return 0;
++}
++
++void mailfrom_auth(arg,len) 
++char *arg; 
++int len;
++{
++  if (!stralloc_copys(&fuser,"")) die_nomem();
++  if (case_starts(arg,"<>")) { if (!stralloc_cats(&fuser,"unknown")) die_nomem(); }
++  else 
++    while (len) {
++      if (*arg == '+') {
++        if (case_starts(arg,"+3D")) { arg=arg+2; len=len-2; if (!stralloc_cats(&fuser,"=")) die_nomem(); }
++        if (case_starts(arg,"+2B")) { arg=arg+2; len=len-2; if (!stralloc_cats(&fuser,"+")) die_nomem(); }
++      }
++      else
++        if (!stralloc_catb(&fuser,arg,1)) die_nomem();
++      arg++; len--;
++    }
++  if(!stralloc_0(&fuser)) die_nomem();
++  if (!remoteinfo) {
++    remoteinfo = fuser.s;
++    if (!env_unset("TCPREMOTEINFO")) die_read();
++    if (!env_put2("TCPREMOTEINFO",remoteinfo)) die_nomem();
++  }
++}
++
++void mailfrom_parms(arg) char *arg;
++{
++  int i;
++  int len;
++
++  len = str_len(arg);
++  if (!stralloc_copys(&mfparms,"")) die_nomem;
++  i = byte_chr(arg,len,'>');
++  if (i > 4 && i < len) {
++    while (len) {
++      arg++; len--; 
++      if (*arg == ' ' || *arg == '\0' ) {
++	if (case_starts(mfparms.s,"SIZE=")) if (mailfrom_size(mfparms.s+5)) { flagsize = 1; return; }
++	if (case_starts(mfparms.s,"AUTH=")) mailfrom_auth(mfparms.s+5,mfparms.len-5);  
++	if (!stralloc_copys(&mfparms,"")) die_nomem;
++      }
++      else
++	if (!stralloc_catb(&mfparms,arg,1)) die_nomem; 
++    }
++  }
++}
+ 
+ void smtp_helo(arg) char *arg;
+ {
+@@ -376,19 +509,32 @@
+ void smtp_ehlo(arg) char *arg;
+ {
+   enew(); eout("Received EHLO "); eoutclean(arg); eout("\n"); eflush();
+-  smtp_greet("250-"); out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
++  char size[FMT_ULONG];
++  size[fmt_ulong(size,(unsigned int) databytes)] = 0;
++  smtp_greet("250-"); 
++  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
++  if (smtpauth == 1 || smtpauth == 11) out("250-AUTH LOGIN PLAIN\r\n");
++  if (smtpauth == 2 || smtpauth == 12) out("250-AUTH CRAM-MD5\r\n");
++  if (smtpauth == 3 || smtpauth == 13) out("250-AUTH LOGIN PLAIN CRAM-MD5\r\n");
++  out("250 SIZE "); out(size); out("\r\n");
+   seenmail = 0; dohelo(arg);
+ }
+ void smtp_rset(arg) char *arg;
+ {
+   flagdenyany = 0;
+-  seenmail = 0;
++  seenmail = 0; seenauth = 0; 
++  mailfrom.len = 0; rcptto.len = 0;
+   enew(); eout("Session RSET\n"); eflush();
+   out("250 flushed\r\n");
+ }
+ void smtp_mail(arg) char *arg;
+ {
++  if (smtpauth)
++    if (smtpauth > 10 && !seenauth) { err_submission(); return; }
+   if (!addrparse(arg)) { err_syntax("MAIL"); return; }
++  flagsize = 0;
++  mailfrom_parms(arg);
++  if (flagsize) { err_databytes(); return; }
+   if (addrrelay()) { err_relay(); return; }
+   flagbarf = bmfcheck();
+   seenmail = 1;
+@@ -548,7 +694,7 @@
+   qp = qmail_qp(&qqt);
+   out("354 go ahead\r\n");
+  
+-  received(&qqt,"SMTP",local,remoteip,remotehost,remoteinfo,fakehelo);
++  received(&qqt,protocol,local,remoteip,remotehost,remoteinfo,fakehelo);
+   blast(&hops);
+   hops = (hops >= MAXHOPS);
+   if (hops) qmail_fail(&qqt);
+@@ -568,10 +714,222 @@
+   eflush();
+ }
+ 
++/* this file is too long ----------------------------------------- SMTP AUTH */
++
++char unique[FMT_ULONG + FMT_ULONG + 3];
++static stralloc authin = {0};   /* input from SMTP client */
++static stralloc user = {0};     /* authorization user-id */
++static stralloc pass = {0};     /* plain passwd or digest */
++static stralloc resp = {0};     /* b64 response */
++static stralloc chal = {0};     /* plain challenge */
++static stralloc slop = {0};     /* b64 challenge */
++
++char **childargs;
++char ssauthbuf[512];
++substdio ssauth = SUBSTDIO_FDBUF(safewrite,3,ssauthbuf,sizeof(ssauthbuf));
++
++int authgetl(void) {
++  int i;
++
++  if (!stralloc_copys(&authin,"")) die_nomem();
++  for (;;) {
++    if (!stralloc_readyplus(&authin,1)) die_nomem(); /* XXX */
++    i = substdio_get(&ssin,authin.s + authin.len,1);
++    if (i != 1) die_read();
++    if (authin.s[authin.len] == '\n') break;
++    ++authin.len;
++  }
++
++  if (authin.len > 0) if (authin.s[authin.len - 1] == '\r') --authin.len;
++  authin.s[authin.len] = 0;
++  if (*authin.s == '*' && *(authin.s + 1) == 0) { return err_authabrt(); }
++  if (authin.len == 0) { return err_input(); }
++  return authin.len;
++}
++
++int authenticate(void)
++{
++  int child;
++  int wstat;
++  int pi[2];
++
++  if (!stralloc_0(&user)) die_nomem();
++  if (!stralloc_0(&pass)) die_nomem();
++  if (!stralloc_0(&chal)) die_nomem();
++
++  if (pipe(pi) == -1) return err_pipe();
++  switch(child = fork()) {
++  case -1:
++    return err_fork();
++  case 0:
++    close(pi[1]);
++    if(fd_copy(3,pi[0]) == -1) return err_pipe();
++    sig_pipedefault();
++    execvp(*childargs, childargs);
++    _exit(1);
++  }
++  close(pi[0]);
++
++  substdio_fdbuf(&ssauth,write,pi[1],ssauthbuf,sizeof ssauthbuf);
++  if (substdio_put(&ssauth,user.s,user.len) == -1) return err_write();
++  if (substdio_put(&ssauth,pass.s,pass.len) == -1) return err_write();
++  if (smtpauth == 2 || smtpauth == 3 || smtpauth == 12 || smtpauth == 13)  
++    if (substdio_put(&ssauth,chal.s,chal.len) == -1) return err_write();
++  if (substdio_flush(&ssauth) == -1) return err_write();
++
++  close(pi[1]);
++  if (!stralloc_copys(&chal,"")) die_nomem();
++  if (!stralloc_copys(&slop,"")) die_nomem();
++  byte_zero(ssauthbuf,sizeof ssauthbuf);
++  if (wait_pid(&wstat,child) == -1) return err_child();
++  if (wait_crashed(wstat)) return err_child();
++  if (wait_exitcode(wstat)) { sleep(AUTHSLEEP); return 1; } /* no */
++  return 0; /* yes */
++}
++
++int auth_login(arg) char *arg;
++{
++  int r;
++
++  if (*arg) {
++    if (r = b64decode(arg,str_len(arg),&user) == 1) return err_input();
++  }
++  else {
++    out("334 VXNlcm5hbWU6\r\n"); flush();       /* Username: */
++    if (authgetl() < 0) return -1;
++    if (r = b64decode(authin.s,authin.len,&user) == 1) return err_input();
++  }
++  if (r == -1) die_nomem();
++
++  out("334 UGFzc3dvcmQ6\r\n"); flush();         /* Password: */
++
++  if (authgetl() < 0) return -1;
++  if (r = b64decode(authin.s,authin.len,&pass) == 1) return err_input();
++  if (r == -1) die_nomem();
++
++  if (!user.len || !pass.len) return err_input();
++  return authenticate();
++}
++
++int auth_plain(arg) char *arg;
++{
++  int r, id = 0;
++
++  if (*arg) {
++    if (r = b64decode(arg,str_len(arg),&resp) == 1) return err_input();
++  }
++  else {
++    out("334 \r\n"); flush();
++    if (authgetl() < 0) return -1;
++    if (r = b64decode(authin.s,authin.len,&resp) == 1) return err_input();
++  }
++  if (r == -1 || !stralloc_0(&resp)) die_nomem();
++  while (resp.s[id]) id++;                       /* "authorize-id\0userid\0passwd\0" */
++
++  if (resp.len > id + 1)
++    if (!stralloc_copys(&user,resp.s + id + 1)) die_nomem();
++  if (resp.len > id + user.len + 2)
++    if (!stralloc_copys(&pass,resp.s + id + user.len + 2)) die_nomem();
++
++  if (!user.len || !pass.len) return err_input();
++  return authenticate();
++}
++
++int auth_cram()
++{
++  int i, r;
++  char *s;
++
++  s = unique;                                           /* generate challenge */
++  s += fmt_uint(s,getpid());
++  *s++ = '.';
++  s += fmt_ulong(s,(unsigned long) now());
++  *s++ = '@';
++  *s++ = 0;
++  if (!stralloc_copys(&chal,"<")) die_nomem();
++  if (!stralloc_cats(&chal,unique)) die_nomem();
++  if (!stralloc_cats(&chal,local)) die_nomem();
++  if (!stralloc_cats(&chal,">")) die_nomem();
++  if (b64encode(&chal,&slop) < 0) die_nomem();
++  if (!stralloc_0(&slop)) die_nomem();
++
++  out("334 ");                                          /* "334 base64_challenge \r\n" */
++  out(slop.s);
++  out("\r\n");
++  flush();
++
++  if (authgetl() < 0) return -1;                        /* got response */
++  if (r = b64decode(authin.s,authin.len,&resp) == 1) return err_input();
++  if (r == -1 || !stralloc_0(&resp)) die_nomem();
++
++  i = str_rchr(resp.s,' ');
++  s = resp.s + i;
++  while (*s == ' ') ++s;
++  resp.s[i] = 0;
++  if (!stralloc_copys(&user,resp.s)) die_nomem();       /* userid */
++  if (!stralloc_copys(&pass,s)) die_nomem();            /* digest */
++
++  if (!user.len || !pass.len) return err_input();
++  return authenticate();
++}
++
++struct authcmd {
++  char *text;
++  int (*fun)();
++} authcmds[] = {
++  { "login",auth_login }
++  , { "plain",auth_plain }
++  , { "cram-md5",auth_cram }
++  , { 0,err_noauth }
++};
++
++void smtp_auth(arg)
++     char *arg;
++{
++  int i;
++  char *cmd = arg;
++
++  if (!smtpauth || !*childargs) { out("503 auth not available (#5.3.3)\r\n"); return; }
++  if (seenauth) { err_authd(); return; }
++  if (seenmail) { err_authmail(); return; }
++
++  if (!stralloc_copys(&user,"")) die_nomem();
++  if (!stralloc_copys(&pass,"")) die_nomem();
++  if (!stralloc_copys(&resp,"")) die_nomem();
++  if (!stralloc_copys(&chal,"")) die_nomem();
++
++  i = str_chr(cmd,' ');
++  arg = cmd + i;
++  while (*arg == ' ') ++arg;
++  cmd[i] = 0;
++
++  for (i = 0;authcmds[i].text;++i)
++    if (case_equals(authcmds[i].text,cmd)) break;
++
++  switch (authcmds[i].fun(arg)) {
++  case 0:
++    seenauth = 1;
++    protocol = "ESMTPA";
++    relayclient = "";
++    remoteinfo = user.s;
++    if (!env_unset("TCPREMOTEINFO")) die_read();
++    if (!env_put2("TCPREMOTEINFO",remoteinfo)) die_nomem();
++    if (!env_put2("RELAYCLIENT",relayclient)) die_nomem();
++    out("235 ok, go ahead (#2.0.0)\r\n");
++    break;
++  case 1:
++    err_authfail(user.s,authcmds[i].text);
++  }
++}
++
++
++/* this file is too long --------------------------------------------- GO ON */
++
+ struct commands smtpcommands[] = {
+   { "rcpt", smtp_rcpt, 0 }
+ , { "mail", smtp_mail, 0 }
+ , { "data", smtp_data, flush }
++, { "auth", smtp_auth, flush }
+ , { "quit", smtp_quit, flush }
+ , { "helo", smtp_helo, flush }
+ , { "ehlo", smtp_ehlo, flush }
+@@ -582,8 +940,11 @@
+ , { 0, err_unrecog, flush }
+ } ;
+ 
+-void main()
++void main(argc,argv)
++int argc;
++char **argv;
+ {
++  childargs = argv + 1;
+   sig_pipeignore();
+   /* esetfd(2); Errors default to FD2 (stderr), change here if needed */
+   if (chdir(auto_qmail) == -1) die_control();
+

@@ -1,0 +1,43 @@
+--- a/qmail-smtpd.c	2015-03-12 18:16:05 +0000
++++ b/qmail-smtpd.c	2015-03-12 18:19:51 +0000
+@@ -121,6 +121,10 @@
+   enew(); eout4(cmd," with too long address (",tmp_buf," bytes) given\n"); eflush();
+   out("555 syntax error (#5.5.4)\r\n");
+ }
++void err_relay() {
++  enew(); eout("Rejecting attempt to use relay characters\n"); eflush();
++  out("553 we don't relay (#5.7.1)\r\n");
++}
+ void err_wantmail()
+ {
+   enew(); eout("Attempted RCPT or DATA before MAIL\n"); eflush();
+@@ -345,6 +349,20 @@
+   return r;
+ }
+ 
++int addrrelay()
++{
++  int j;
++  j = addr.len;
++  while(--j >= 0)
++    if (addr.s[j] == '@') break;
++  if (j < 0) j = addr.len;
++  while(--j >= 0) {
++    if (addr.s[j] == '@') return 1;
++    if (addr.s[j] == '%') return 1;
++    if (addr.s[j] == '!') return 1;
++  }
++  return 0;
++}
+ 
+ int seenmail = 0;
+ int flagbarf; /* defined if seenmail */
+@@ -371,6 +389,7 @@
+ void smtp_mail(arg) char *arg;
+ {
+   if (!addrparse(arg)) { err_syntax("MAIL"); return; }
++  if (addrrelay()) { err_relay(); return; }
+   flagbarf = bmfcheck();
+   seenmail = 1;
+   if (!stralloc_copys(&rcptto,"")) die_nomem();
+

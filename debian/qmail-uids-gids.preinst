@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+test "$1" = 'upgrade' || exit 0
+dpkg --compare-versions "$2" lt 1.06 || exit 0
+
+cat >&2 <<-EOT
+	Upgrading qmail-uids-gids from version $2 is not yet supported.
+
+	EOT
+exit 1

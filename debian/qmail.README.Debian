@@ -1,0 +1,41 @@
+qmail for Debian
+----------------
+
+This package is based on the netqmail distribution of qmail put together
+by a motley krewe of qmail contributors (see the README).  It is derived
+from Daniel Bernstein's qmail-1.03 plus bug fixes, a few feature
+enhancements, and some documentation.
+
+This package does not install qmail to receive and deliver mail on the
+system.
+
+To enable qmail as mail-tranfer-agent on Debian, you need to install the
+qmail-run package, or follow the instructions in [0]Life with qmail,
+chapter 2.8.
+
+With this package, qmail is set up according to [0]Life with qmail up to
+chapter 2.7., with the following exceptions:
+
+This package includes the [1]qmail-verify patch from Andrew Richards and
+its pre-requisite, the [2]errmsg patch.
+
+qmail's home on Debian is /var/lib/qmail/, not /var/qmail/, as the latter
+does not comply with the FHS.  To be consistent with existing programs and
+documentation, it is recommended to create a compatibility symlink
+/var/qmail -> /var/lib/qmail after installing this package, do
+
+ # ln -s /var/lib/qmail /var/qmail
+
+daemontools' (and runit's) directory for supervised services on Debian is
+/etc/service/, not /service/.  To be consistent with existing programs and
+documentation, it is recommended to create a compatibility symlink
+/service -> /etc/service.  If not yet done, do
+
+ # ln -s /etc/service /service
+
+
+[0] http://lifewithqmail.org/lwq.html
+[1] http://free.acrconsulting.co.uk/email/qmail-verify.html
+[2] http://free.acrconsulting.co.uk/email/qmail-errmsg.html
+
+ -- Gerrit Pape <pape@smarden.org>, Wed, 23 Apr 2008 01:47:25 +0000

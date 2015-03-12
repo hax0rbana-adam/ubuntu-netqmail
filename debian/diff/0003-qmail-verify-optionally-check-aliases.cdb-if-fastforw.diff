@@ -1,0 +1,88 @@
+From e0a12b4e5772df5b656ea4cf7b7e6e2d39b9bc55 Mon Sep 17 00:00:00 2001
+From: Gerrit Pape <pape@smarden.org>
+Date: Fri, 5 Mar 2010 01:14:31 +0000
+Subject: [PATCH 3/3] qmail-verify: optionally check aliases.cdb if fastforward is used
+
+If qmail-verify finds ~alias/.qmail-default and the environment variable
+VERIFY_FASTFORWARDCDB is set to e.g. /etc/aliases.cdb, instead of allowing
+all addresses it will lookup the recipient address in that constant
+database, and only allow the address if a matching entry is found.
+---
+ qmail-verify.c |   54 +++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 53 insertions(+), 1 deletions(-)
+
+diff --git a/qmail-verify.c b/qmail-verify.c
+index 641f920..a33c20d 100644
+--- a/qmail-verify.c
++++ b/qmail-verify.c
+@@ -164,6 +164,49 @@ int userext()	/* from qmail-getpw.c */
+   }
+ }
+ 
++int verify_aliasescdb(addr, fn)
++char *addr;
++char *fn;
++{
++  int fd;
++  static stralloc key = {};
++  uint32 dlen;
++  int r;
++  int at;
++
++  fd = open_read(fn);
++  if (fd == -1) die_cdb();
++  if (!stralloc_copys(&key,":")) die_nomem();
++  if (!stralloc_cats(&key,addr)) die_nomem();
++  case_lowerb(key.s,key.len);
++
++  r = cdb_seek(fd,key.s,key.len,&dlen);
++  if (r == -1) die_cdb();
++  if (r) { close(fd); return 1; }
++
++  at = str_rchr(addr,'@');
++  if (!addr[at]) { close(fd); return 0; }
++
++  if (!stralloc_copys(&key,":")) die_nomem();
++  if (!stralloc_cats(&key,addr + at)) nomem();
++  case_lowerb(key.s,key.len);
++
++  r = cdb_seek(fd,key.s,key.len,&dlen);
++  if (r == -1) die_cdb();
++  if (r) { close(fd); return 1; }
++
++  if (!stralloc_copys(&key,":")) nomem();
++  if (!stralloc_catb(&key,addr,at + 1)) nomem();
++  case_lowerb(key.s,key.len);
++
++  r = cdb_seek(fd,key.s,key.len,&dlen);
++  if (r == -1) die_cdb();
++  close(fd);
++  if (r) return 1;
++
++  return 0;
++}
++
+ int verifyaddr(addr)
+ char *addr;
+ {
+@@ -351,7 +394,16 @@ char *addr;
+         if (!stralloc_cats(&qme,"default")) die_nomem();
+         if (!stralloc_0(&qme)) die_nomem();
+ /* e.g. homedir/.qmail-[xxx-]default */
+-        if (stat(qme.s,&st) == 0) return allowaddr(addr,ADDR_OK|QVPOS12);
++        if (stat(qme.s,&st) == 0) {
++	  /* if it's ~alias/.qmail-default, optionally check aliases.cdb */
++          if (!i && (quser == auto_usera)) {
++            char *s;
++            if (s = env_get("VERIFY_FASTFORWARDCDB"))
++              if (!verify_aliasescdb(addr, s))
++                return denyaddr(addr,ADDR_NOK|QVPOS12);
++          }
++          return allowaddr(addr,ADDR_OK|QVPOS12);
++        }
+         if (errno != error_noent) /* Maybe not running as root so access denied */
+           return stat_error(qme.s,errno,STATERR|QVPOS13);
+       }
+-- 
+1.7.0
+

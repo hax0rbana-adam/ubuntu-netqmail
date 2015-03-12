@@ -1,0 +1,153 @@
+#!/bin/sh
+set -e
+
+test "$1" = 'configure' || exit 0
+
+errcho () {
+  echo "$*" >&2
+}
+
+check_uidgid () {
+  USER=$1
+  ID=$2
+  GROUP=$3
+  GID=$4
+  HOM=$5
+
+  # check for user
+  ID_=`id -u ${USER} 2>/dev/null` || return 1
+  if test "$ID_" -ne "$ID"; then
+    errcho "$USER: uid must be \"$ID\", not \"$ID_\"."
+    return 2
+  fi
+  # check group
+  GROUP_=`id -gn ${USER} 2>/dev/null` || return 100
+  if test "$GROUP_" != "$GROUP"; then
+    errcho "$USER: must be group \"$GROUP\", not \"$GROUP_\"."
+    return 3
+  fi
+  GID_=`id -g ${USER} 2>/dev/null` || return 100
+  if test "$GID" -ne 0 && test "$GID_" -ne "$GID"; then
+    errcho "$GROUP: gid must be \"$GID\", not \"$GID_\"."
+    return 4
+  fi
+  # check home
+  HOM_=`grep -E "^$USER:*" /etc/passwd | cut -d : -f 6` || return 100
+  if test "$HOM_" != "$HOM"; then
+    errcho "$USER: home must be \"$HOM\", not \"$HOM_\"."
+    return 5
+  fi
+  # ok
+  return 0
+}
+add_usersgroups () {
+  DEBUG=$*
+
+  $DEBUG groupadd -g 64010 qmail || return 1
+  $DEBUG addgroup --system nofiles || return 1
+  $DEBUG useradd -u 64010 -g nofiles -d /var/lib/qmail/alias alias || return 1
+  $DEBUG useradd -u 64011 -g nofiles -d /var/lib/qmail qmaild || return 1
+  $DEBUG useradd -u 64015 -g nofiles -d /var/lib/qmail qmaill || return 1
+  $DEBUG useradd -u 64016 -g nofiles -d /var/lib/qmail qmailp || return 1
+  $DEBUG useradd -u 64014 -g qmail -d /var/lib/qmail qmailq || return 1
+  $DEBUG useradd -u 64013 -g qmail -d /var/lib/qmail qmailr || return 1
+  $DEBUG useradd -u 64012 -g qmail -d /var/lib/qmail qmails || return 1
+  # done
+  return 0
+}
+check_user () {
+  getent passwd "$1" >/dev/null || return 0
+  errcho "user \"$1\" found in the passwd database."
+  return 1
+}
+check_uid () {
+  getent passwd "$1" >/dev/null || return 0
+  errcho "uid \"$1\" found in the passwd database."
+  return 1
+}
+check_gid () {
+  getent group "$1" >/dev/null || return 0
+  errcho "gid \"$1\" found in the group database."
+  return 1
+}
+check_group () {
+  getent group "$1" >/dev/null || return 0
+  errcho "group \"$1\" found in the group database."
+  return 1
+}
+stopinst () {
+  cat <<EOT >&2
+
+You must have the following entries in /etc/passwd and /etc/group to install
+the Debian qmail packages on this system; if none of these users and groups
+exist yet, this package will add them automatically.
+
+/etc/passwd:
+alias:x:64010:XXXXX:qmail alias:/var/lib/qmail/alias:/bin/sh
+qmaild:x:64011:XXXXX:qmail daemon:/var/lib/qmail:/bin/sh
+qmails:x:64012:64010:qmail send:/var/lib/qmail:/bin/sh
+qmailr:x:64013:64010:qmail remote:/var/lib/qmail:/bin/sh
+qmailq:x:64014:64010:qmail queue:/var/lib/qmail:/bin/sh
+qmaill:x:64015:XXXXX:qmail log:/var/lib/qmail:/bin/sh
+qmailp:x:64016:XXXXX:qmail pw:/var/lib/qmail:/bin/sh
+/etc/group:
+qmail:x:64010:
+nofiles:x:XXXXX:
+
+Where XXXXX is an abritary system group id for the 'nofiles' group.
+
+Installation aborted.
+
+EOT
+  exit 1
+}
+
+# check uids and gids
+ALIAS="alias 64010 nofiles 0 /var/lib/qmail/alias"
+QMAILD="qmaild 64011 nofiles 0 /var/lib/qmail"
+QMAILL="qmaill 64015 nofiles 0 /var/lib/qmail"
+QMAILP="qmailp 64016 nofiles 0 /var/lib/qmail"
+QMAILQ="qmailq 64014 qmail 64010 /var/lib/qmail"
+QMAILR="qmailr 64013 qmail 64010 /var/lib/qmail"
+QMAILS="qmails 64012 qmail 64010 /var/lib/qmail"
+
+RC=0
+check_uidgid $ALIAS || RC=$?
+if test "$RC" -eq 1; then
+  # check for any existing qmail-groups
+  for i in alias qmaild qmaill qmailp qmailq qmailr qmails; do
+    check_user $i || stopinst
+  done
+  check_group qmail || stopinst
+  for i in 64010 64011 64012 64013 64014 64015 64016; do
+    check_uid $i || stopinst
+  done
+  check_gid 64010 || stopinst
+  cat <<EOT
+No qmail-users or -groups found.
+
+This script runs the following commands, without adding these users and
+groups, this qmail-package cannot run on this system.
+
+`add_usersgroups "echo # "`
+
+EOT
+  if ! add_usersgroups; then
+    errcho "failed."
+    stopinst
+  fi
+  RC=0
+fi
+test "$RC" -eq 0 || stopinst
+
+RC=0
+check_uidgid $ALIAS  || RC=$?
+check_uidgid $QMAILD || RC=$?
+check_uidgid $QMAILL || RC=$?
+check_uidgid $QMAILP || RC=$?
+check_uidgid $QMAILQ || RC=$?
+check_uidgid $QMAILR || RC=$?
+check_uidgid $QMAILS || RC=$?
+test "$RC" -eq 0 || stopinst
+
+echo "qmail uids and gids ok."
