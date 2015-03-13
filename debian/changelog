@@ -1,3 +1,9 @@
+netqmail (1.06-5.6) trusty; urgency=low
+
+  * add recipient verification patch
+
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Fri, 13 Mar 2015 02:48:44 +0000
+
 netqmail (1.06-5.5) trusty; urgency=low
 
   * fix duplicate line during merge

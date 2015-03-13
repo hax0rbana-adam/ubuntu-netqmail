@@ -1,0 +1,88 @@
+--- a/qmail-smtpd.c
++++ b/qmail-smtpd.c
+@@ -53,6 +53,7 @@ int rcptcount;
+ stralloc fuser = {0};
+ stralloc mfparms = {0};
+ stralloc addr = {0}; /* will be 0-terminated, if addrparse returns 1 */
++static char *rcptcheck[2] = { 0, 0 };
+ 
+ int safewrite(fd,buf,len) int fd; char *buf; int len;
+ {
+@@ -96,6 +97,18 @@ void die_ipme()
+   enew(); eout("Unable to figure out my IP addresses: quitting\n"); eflush();
+   out("421 unable to figure out my IP addresses (#4.3.0)\r\n"); flush(); _exit(1);
+ }
++void die_fork() {
++  enew(); eout("Unable to fork: quitting\n"); eflush();
++  out("421 unable to fork (#4.3.0)\r\n"); flush(); _exit(1);
++}
++void die_rcpt() {
++  enew(); eout("Unable to verify recipient: quitting\n"); eflush();
++  out("421 unable to verify recipient (#4.3.0)\r\n"); flush(); _exit(1);
++}
++void die_rcpt2() {
++  enew(); eout("Unable to execute recipient check: quitting\n"); eflush();
++  out("421 unable to execute recipient check (#4.3.0)\r\n"); flush(); _exit(1);
++}
+ void straynewline()
+ {
+   enew(); eout("Stray newline: quitting\n"); eflush();
+@@ -239,6 +252,10 @@ void err_nosuchuser550()
+   enew(); eout("Unverified mailbox at RCPT time\n"); eflush();
+   out("550 sorry, no mailbox here by that name. (#5.1.1)\r\n");
+ }
++void err_nosuchuser553() {
++  enew(); eout("Recipient could not be externally validated\n"); eflush();
++  out("553 sorry, no mailbox here by that name. (#5.1.1)\r\n");
++}
+ void err_nosuchuser554()
+ {
+   enew(); eout("Unverified mailbox(es) at DATA time\n"); eflush();
+@@ -315,6 +332,7 @@ void setup()
+   if (!remotehost) remotehost = "unknown";
+   remoteinfo = env_get("TCPREMOTEINFO");
+   relayclient = env_get("RELAYCLIENT");
++  rcptcheck[0] = env_get("RCPTCHECK");
+ 
+   auth = env_get("SMTPAUTH");
+   if (auth) {
+@@ -443,6 +461,31 @@ int seenmail = 0;
+ int flagbarf; /* defined if seenmail */
+ int flagsize;
+ 
++int addrvalid()
++{
++  int pid;
++  int wstat;
++
++  if (!rcptcheck[0]) return 1;
++
++  switch(pid = fork()) {
++  case -1: die_fork();
++  case 0:
++    if (!env_put2("SENDER",mailfrom.s)) die_nomem();
++    if (!env_put2("RECIPIENT",addr.s)) die_nomem();
++    execv(*rcptcheck,rcptcheck);
++    _exit(120);
++  }
++  if (wait_pid(&wstat,pid) == -1) die_rcpt2();
++  if (wait_crashed(wstat)) die_rcpt2();
++  switch(wait_exitcode(wstat)) {
++  case 100: return 0;
++  case 111: die_rcpt();
++  case 120: die_rcpt2();
++  }
++  return 1;
++}
++
+ int mailfrom_size(arg) char *arg;
+ {
+   long r;
+@@ -557,6 +600,7 @@ void smtp_rcpt(arg) char *arg; {
+   else
+   {
+     if (!addrallowed()) { err_nogateway(); return; }
++    if (!addrvalid()) { err_nosuchuser553(); return; }
+     if (verify && verifyrcpt(find_digit_colon_eos(verify),&addr,verifydefer,die_qvtimeout,die_qvmiscfail))
+     {
+       err_nosuchuser550();
