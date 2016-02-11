@@ -1,33 +1,33 @@
 diff --git a/Makefile b/Makefile
-index 0f0e31a..c1b035a 100644
+index f4101d2..4947b9c 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -808,7 +808,7 @@ dnsptr dnsip dnsmxip dnsfq hostname ipmeprint qreceipt qsmhook qbiff \
+@@ -824,7 +824,7 @@ dnsptr dnsip dnsmxip dnsfq hostname ipmeprint qreceipt qsmhook qbiff \
  forward preline condredirect bouncesaying except maildirmake \
  maildir2mbox maildirwatch qail elq pinq idedit install-big install \
  instcheck home home+df proc proc+df binm1 binm1+df binm2 binm2+df \
--binm3 binm3+df
-+binm3 binm3+df update_tmprsadh
+-binm3 binm3+df qmail-verify
++binm3 binm3+df qmail-verify update_tmprsadh
  
  load: \
  make-load warn-auto.sh systype
-@@ -1444,6 +1444,7 @@ ndelay.a case.a sig.a open.a lock.a seek.a getln.a stralloc.a alloc.a \
- substdio.a error.a str.a fs.a auto_qmail.o dns.lib socket.lib
+@@ -1462,6 +1462,7 @@ base64.o md5c.o hmac_md5.o \
+ dns.lib socket.lib
  	./load qmail-remote control.o constmap.o timeoutread.o \
  	timeoutwrite.o timeoutconn.o tcpto.o now.o dns.o ip.o \
 +	tls.o ssl_timeoutio.o -L/usr/local/ssl/lib -lssl -lcrypto \
  	ipalloc.o ipme.o quote.o ndelay.a case.a sig.a open.a \
  	lock.a seek.a getln.a stralloc.a alloc.a substdio.a error.a \
- 	str.a fs.a auto_qmail.o  `cat dns.lib` `cat socket.lib`
-@@ -1539,6 +1540,7 @@ open.a sig.a case.a env.a stralloc.a alloc.a substdio.a error.a str.a \
- fs.a auto_qmail.o socket.lib
+ 	base64.o md5c.o hmac_md5.o \
+@@ -1563,6 +1564,7 @@ fs.a auto_qmail.o base64.o socket.lib
  	./load qmail-smtpd rcpthosts.o commands.o timeoutread.o \
+ 	sockbits.o udpbits.o verifyrcpt.o \
  	timeoutwrite.o ip.o ipme.o ipalloc.o control.o constmap.o \
 +	tls.o ssl_timeoutio.o ndelay.a -L/usr/local/ssl/lib -lssl -lcrypto \
  	received.o date822fmt.o now.o qmail.o cdb.a fd.a wait.a \
+ 	scan_misc.o \
  	datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
- 	alloc.a substdio.a error.a str.a fs.a auto_qmail.o  `cat \
-@@ -1827,7 +1829,8 @@ date822fmt.h date822fmt.c dns.h dns.c trylsock.c tryrsolv.c ip.h ip.c \
+@@ -1884,7 +1886,8 @@ date822fmt.h date822fmt.c dns.h dns.c trylsock.c tryrsolv.c ip.h ip.c \
  ipalloc.h ipalloc.c select.h1 select.h2 trysysel.c ndelay.h ndelay.c \
  ndelay_off.c direntry.3 direntry.h1 direntry.h2 trydrent.c prot.h \
  prot.c chkshsgr.c warn-shsgr tryshsgr.c ipme.h ipme.c trysalen.c \
@@ -37,7 +37,7 @@ index 0f0e31a..c1b035a 100644
  	shar -m `cat FILES` > shar
  	chmod 400 shar
  
-@@ -2108,6 +2111,19 @@ timeoutwrite.o: \
+@@ -2169,6 +2172,19 @@ timeoutwrite.o: \
  compile timeoutwrite.c timeoutwrite.h select.h error.h readwrite.h
  	./compile timeoutwrite.c
  
@@ -57,7 +57,7 @@ index 0f0e31a..c1b035a 100644
  token822.o: \
  compile token822.c stralloc.h gen_alloc.h alloc.h str.h token822.h \
  gen_alloc.h gen_allocdefs.h
-@@ -2139,3 +2155,26 @@ compile wait_nohang.c haswaitp.h
+@@ -2213,3 +2229,26 @@ compile wait_nohang.c haswaitp.h
  wait_pid.o: \
  compile wait_pid.c error.h haswaitp.h
  	./compile wait_pid.c
@@ -85,9 +85,8 @@ index 0f0e31a..c1b035a 100644
 +	echo "Creating new temporary RSA and DH parameters"
 +	./update_tmprsadh
 diff --git a/Makefile-cert.mk b/Makefile-cert.mk
-new file mode 100644
-index 0000000..d869999
---- /dev/null
+index e69de29..d869999 100644
+--- a/Makefile-cert.mk
 +++ b/Makefile-cert.mk
 @@ -0,0 +1,21 @@
 +cert-req: req.pem
@@ -112,10 +111,10 @@ index 0000000..d869999
 +	@echo "Send req.pem to your CA to obtain signed_req.pem, and do:"
 +	@echo "cat signed_req.pem >> QMAIL/control/servercert.pem"
 diff --git a/TARGETS b/TARGETS
-index facdad7..46b9508 100644
+index a92820e..9c54cdf 100644
 --- a/TARGETS
 +++ b/TARGETS
-@@ -168,6 +168,8 @@ control.o
+@@ -170,6 +170,8 @@ control.o
  constmap.o
  timeoutread.o
  timeoutwrite.o
@@ -124,7 +123,7 @@ index facdad7..46b9508 100644
  timeoutconn.o
  tcpto.o
  dns.o
-@@ -320,6 +322,7 @@ binm2
+@@ -330,6 +332,7 @@ binm2
  binm2+df
  binm3
  binm3+df
@@ -132,7 +131,7 @@ index facdad7..46b9508 100644
  it
  qmail-local.0
  qmail-lspawn.0
-@@ -385,3 +388,4 @@ forgeries.0
+@@ -396,3 +399,4 @@ forgeries.0
  man
  setup
  check
@@ -147,10 +146,10 @@ index e58fb9b..8feb117 100644
  
  This will be used to compile .c files.
 diff --git a/dns.c b/dns.c
-index e9faad7..055ab76 100644
+index f7d9a1f..08fd8b2 100644
 --- a/dns.c
 +++ b/dns.c
-@@ -267,12 +267,11 @@ stralloc *sa;
+@@ -259,12 +259,11 @@ stralloc *sa;
  int pref;
  {
   int r;
@@ -164,7 +163,7 @@ index e9faad7..055ab76 100644
     if (!glue.s[ip_scan(glue.s,&ix.ip)] || !glue.s[ip_scanbracket(glue.s,&ix.ip)])
      {
       if (!ipalloc_append(ia,&ix)) return DNS_MEM;
-@@ -291,9 +290,16 @@ int pref;
+@@ -283,9 +282,16 @@ int pref;
     ix.ip = ip;
     ix.pref = pref;
     if (r == DNS_SOFT) return DNS_SOFT;
@@ -182,7 +181,7 @@ index e9faad7..055ab76 100644
   return 0;
  }
  
-@@ -313,7 +319,7 @@ unsigned long random;
+@@ -305,7 +311,7 @@ unsigned long random;
  {
   int r;
   struct mx { stralloc sa; unsigned short p; } *mx;
@@ -191,7 +190,7 @@ index e9faad7..055ab76 100644
   int nummx;
   int i;
   int j;
-@@ -325,7 +331,6 @@ unsigned long random;
+@@ -317,7 +323,6 @@ unsigned long random;
   if (!stralloc_copy(&glue,sa)) return DNS_MEM;
   if (!stralloc_0(&glue)) return DNS_MEM;
   if (glue.s[0]) {
@@ -200,10 +199,10 @@ index e9faad7..055ab76 100644
      {
       if (!ipalloc_append(ia,&ix)) return DNS_MEM;
 diff --git a/hier.c b/hier.c
-index 28e568d..4a304ce 100644
+index 6c6e929..c01a825 100644
 --- a/hier.c
 +++ b/hier.c
-@@ -143,6 +143,9 @@ void hier()
+@@ -144,6 +144,9 @@ void hier()
    c(auto_qmail,"bin","qail",auto_uido,auto_gidq,0755);
    c(auto_qmail,"bin","elq",auto_uido,auto_gidq,0755);
    c(auto_qmail,"bin","pinq",auto_uido,auto_gidq,0755);
@@ -234,10 +233,10 @@ index ad61475..bf9d060 100644
  #include "gen_alloc.h"
  
 diff --git a/qmail-control.9 b/qmail-control.9
-index 503ce93..945f15f 100644
+index 2857813..6086ba5 100644
 --- a/qmail-control.9
 +++ b/qmail-control.9
-@@ -43,11 +43,14 @@ control	default	used by
+@@ -44,11 +44,14 @@ control	default	used by
  .I badmailfrom	\fR(none)	\fRqmail-smtpd
  .I bouncefrom	\fRMAILER-DAEMON	\fRqmail-send
  .I bouncehost	\fIme	\fRqmail-send
@@ -252,7 +251,7 @@ index 503ce93..945f15f 100644
  .I doublebouncehost	\fIme	\fRqmail-send
  .I doublebounceto	\fRpostmaster	\fRqmail-send
  .I envnoathost	\fIme	\fRqmail-send
-@@ -61,11 +64,17 @@ control	default	used by
+@@ -62,11 +65,17 @@ control	default	used by
  .I qmqpservers	\fR(none)	\fRqmail-qmqpc
  .I queuelifetime	\fR604800	\fRqmail-send
  .I rcpthosts	\fR(none)	\fRqmail-smtpd
@@ -271,12 +270,12 @@ index 503ce93..945f15f 100644
  .fi
  .RE
 diff --git a/qmail-remote.8 b/qmail-remote.8
-index 08bae85..685f47c 100644
+index 8ab9b93..6280d23 100644
 --- a/qmail-remote.8
 +++ b/qmail-remote.8
-@@ -114,6 +114,10 @@ arguments.
- always exits zero.
- .SH "CONTROL FILES"
+@@ -227,6 +227,10 @@ can be constructed as follows:
+    :mailrelay.example.com:587|e=mc2|testpass
+ .EE
  .TP 5
 +.I clientcert.pem
 +SSL certificate that is used to authenticate with the remote server
@@ -285,7 +284,7 @@ index 08bae85..685f47c 100644
  .I helohost
  Current host name,
  for use solely in saying hello to the remote SMTP server.
-@@ -123,6 +127,16 @@ if that is supplied;
+@@ -236,6 +240,16 @@ if that is supplied;
  otherwise
  .B qmail-remote
  refuses to run.
@@ -302,7 +301,7 @@ index 08bae85..685f47c 100644
  .TP 5
  .I smtproutes
  Artificial SMTP routes.
-@@ -156,6 +170,8 @@ may be empty;
+@@ -272,6 +286,8 @@ may be empty;
  this tells
  .B qmail-remote
  to look up MX records as usual.
@@ -311,7 +310,7 @@ index 08bae85..685f47c 100644
  .I smtproutes
  may include wildcards:
  
-@@ -195,6 +211,33 @@ Number of seconds
+@@ -315,6 +331,33 @@ Number of seconds
  .B qmail-remote
  will wait for each response from the remote SMTP server.
  Default: 1200.
@@ -346,10 +345,10 @@ index 08bae85..685f47c 100644
  addresses(5),
  envelopes(5),
 diff --git a/qmail-remote.c b/qmail-remote.c
-index 7d65473..71592b1 100644
+index ddc7317..62562fd 100644
 --- a/qmail-remote.c
 +++ b/qmail-remote.c
-@@ -48,6 +48,17 @@ saa reciplist = {0};
+@@ -59,6 +59,17 @@ saa reciplist = {0};
  
  struct ip_address partner;
  
@@ -367,7 +366,7 @@ index 7d65473..71592b1 100644
  void out(s) char *s; { if (substdio_puts(subfdoutsmall,s) == -1) _exit(0); }
  void zero() { if (substdio_put(subfdoutsmall,"\0",1) == -1) _exit(0); }
  void zerodie() { zero(); substdio_flush(subfdoutsmall); _exit(0); }
-@@ -99,6 +110,9 @@ void dropped() {
+@@ -116,6 +127,9 @@ void dropped() {
    outhost();
    out(" but connection died. ");
    if (flagcritical) out("Possible duplicate! ");
@@ -377,7 +376,7 @@ index 7d65473..71592b1 100644
    out("(#4.4.2)\n");
    zerodie();
  }
-@@ -110,6 +124,12 @@ int timeout = 1200;
+@@ -127,6 +141,12 @@ int timeout = 1200;
  int saferead(fd,buf,len) int fd; char *buf; int len;
  {
    int r;
@@ -390,7 +389,7 @@ index 7d65473..71592b1 100644
    r = timeoutread(timeout,smtpfd,buf,len);
    if (r <= 0) dropped();
    return r;
-@@ -117,6 +137,12 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
+@@ -134,6 +154,12 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
  int safewrite(fd,buf,len) int fd; char *buf; int len;
  {
    int r;
@@ -403,7 +402,7 @@ index 7d65473..71592b1 100644
    r = timeoutwrite(timeout,smtpfd,buf,len);
    if (r <= 0) dropped();
    return r;
-@@ -163,6 +189,65 @@ unsigned long smtpcode()
+@@ -180,6 +206,65 @@ unsigned long smtpcode()
    return code;
  }
  
@@ -469,7 +468,7 @@ index 7d65473..71592b1 100644
  void outsmtptext()
  {
    int i; 
-@@ -179,6 +264,11 @@ void quit(prepend,append)
+@@ -196,6 +281,11 @@ void quit(prepend,append)
  char *prepend;
  char *append;
  {
@@ -481,7 +480,7 @@ index 7d65473..71592b1 100644
    substdio_putsflush(&smtpto,"QUIT\r\n");
    /* waiting for remote side is just too ridiculous */
    out(prepend);
-@@ -186,6 +276,30 @@ char *append;
+@@ -203,6 +293,30 @@ char *append;
    out(append);
    out(".\n");
    outsmtptext();
@@ -512,7 +511,7 @@ index 7d65473..71592b1 100644
    zerodie();
  }
  
-@@ -214,6 +328,199 @@ void blast()
+@@ -231,6 +345,199 @@ void blast()
    substdio_flush(&smtpto);
  }
  
@@ -711,12 +710,11 @@ index 7d65473..71592b1 100644
 +
  stralloc recip = {0};
  
- void smtp()
-@@ -221,15 +528,54 @@ void smtp()
-   unsigned long code;
+ void mailfrom()
+@@ -395,16 +702,45 @@ void smtp()
    int flagbother;
    int i;
-+
+  
 +#ifndef PORT_SMTP
 +  /* the qmtpc patch uses smtp_port and undefines PORT_SMTP */
 +# define port smtp_port
@@ -730,9 +728,15 @@ index 7d65473..71592b1 100644
 +    if (port == 465) smtps = 1;
 +  if (!smtps)
 +#endif
++
+   code = smtpcode();
+   if (code >= 500) quit("DConnected to "," but greeting failed");
+   if (code != 220) quit("ZConnected to "," but greeting failed");
   
-   if (smtpcode() != 220) quit("ZConnected to "," but greeting failed");
-  
+-  substdio_puts(&smtpto,"EHLO ");
+-  substdio_put(&smtpto,helohost.s,helohost.len);
+-  substdio_puts(&smtpto,"\r\n");
+-  substdio_flush(&smtpto);
 +#ifdef EHLO
 +# ifdef TLS
 +  if (!smtps)
@@ -753,21 +757,20 @@ index 7d65473..71592b1 100644
 +    /* and if EHLO failed, use HELO */
 +  } else {
 +#endif
-+ 
-   substdio_puts(&smtpto,"HELO ");
-   substdio_put(&smtpto,helohost.s,helohost.len);
-   substdio_puts(&smtpto,"\r\n");
-   substdio_flush(&smtpto);
-   if (smtpcode() != 250) quit("ZConnected to "," but my name was rejected");
-  
-+#ifdef EHLO
-+  }
-+#endif
-+ 
-   substdio_puts(&smtpto,"MAIL FROM:<");
-   substdio_put(&smtpto,sender.s,sender.len);
-   substdio_puts(&smtpto,">\r\n");
-@@ -417,6 +763,9 @@ char **argv;
+ 
+-  if (smtpcode() != 250) {
+     substdio_puts(&smtpto,"HELO ");
+     substdio_put(&smtpto,helohost.s,helohost.len);
+     substdio_puts(&smtpto,"\r\n");
+@@ -412,6 +748,7 @@ void smtp()
+     code = smtpcode();
+     if (code >= 500) quit("DConnected to "," but my name was rejected");
+     if (code != 250) quit("ZConnected to "," but my name was rejected");
++
+   }
+ 
+   if (user.len && pass.len)
+@@ -656,6 +993,9 @@ char **argv;
      if (timeoutconn(smtpfd,&ip.ix[i].ip,(unsigned int) port,timeoutconnect) == 0) {
        tcpto_err(&ip.ix[i].ip,0);
        partner = ip.ix[i].ip;
@@ -778,7 +781,7 @@ index 7d65473..71592b1 100644
      }
      tcpto_err(&ip.ix[i].ip,errno == error_timeout);
 diff --git a/qmail-smtpd.8 b/qmail-smtpd.8
-index c4640b8..662a3d0 100644
+index 977e173..fad766e 100644
 --- a/qmail-smtpd.8
 +++ b/qmail-smtpd.8
 @@ -14,6 +14,15 @@ must be supplied several environment variables;
@@ -797,7 +800,7 @@ index c4640b8..662a3d0 100644
  .B qmail-smtpd
  is responsible for counting hops.
  It rejects any message with 100 or more 
-@@ -49,6 +58,19 @@ may be of the form
+@@ -72,6 +81,19 @@ may be of the form
  .BR @\fIhost ,
  meaning every address at
  .IR host .
@@ -817,7 +820,7 @@ index c4640b8..662a3d0 100644
  .TP 5
  .I databytes
  Maximum number of bytes allowed in a message,
-@@ -76,6 +98,18 @@ If the environment variable
+@@ -99,6 +121,14 @@ If the environment variable
  .B DATABYTES
  is set, it overrides
  .IR databytes .
@@ -828,15 +831,11 @@ index c4640b8..662a3d0 100644
 +.B qmail-smtpd
 +will use them for TLS sessions instead of generating one on-the-fly 
 +(which is very timeconsuming).
-+.TP 5
-+.I dh2048.pem
-+2048 bit counterpart for 
-+.B dh2048.pem. 
 +
  .TP 5
  .I localiphost
  Replacement host name for local IP addresses.
-@@ -151,6 +185,19 @@ may include wildcards:
+@@ -174,6 +204,19 @@ may include wildcards:
  
  Envelope recipient addresses without @ signs are
  always allowed through.
@@ -856,11 +855,10 @@ index c4640b8..662a3d0 100644
  .TP 5
  .I smtpgreeting
  SMTP greeting message.
-@@ -169,6 +216,24 @@ Number of seconds
- .B qmail-smtpd
+@@ -193,6 +236,23 @@ Number of seconds
  will wait for each new buffer of data from the remote SMTP client.
  Default: 1200.
-+
+ 
 +.TP 5
 +.I tlsclients
 +A list of email addresses. When relay rules would reject an incoming message,
@@ -878,19 +876,17 @@ index c4640b8..662a3d0 100644
 +.B TLSCIPHERS
 +is set to such a string, it takes precedence.
 +
- .SH "SEE ALSO"
- tcp-env(1),
- tcp-environ(5),
+ .SH "ENVIRONMENT VARIABLES READ"
+ Environment variables may be defined globally in the
+ .B qmail-smtpd
 diff --git a/qmail-smtpd.c b/qmail-smtpd.c
-index 54df00c..17e2754 100644
+index 797a188..9d73cb8 100644
 --- a/qmail-smtpd.c
 +++ b/qmail-smtpd.c
-@@ -28,9 +28,27 @@
- unsigned int databytes = 0;
- int timeout = 1200;
+@@ -55,9 +55,25 @@ stralloc mfparms = {0};
+ stralloc addr = {0}; /* will be 0-terminated, if addrparse returns 1 */
+ static char *rcptcheck[2] = { 0, 0 };
  
-+const char *protocol = "SMTP";
-+
 +#ifdef TLS
 +#include <sys/stat.h>
 +#include "tls.h"
@@ -911,38 +907,45 @@ index 54df00c..17e2754 100644
 +  else
 +#endif
    r = timeoutwrite(timeout,fd,buf,len);
-   if (r <= 0) _exit(1);
-   return r;
-@@ -50,7 +68,16 @@ void die_ipme() { out("421 unable to figure out my IP addresses (#4.3.0)\r\n");
- void straynewline() { out("451 See http://pobox.com/~djb/docs/smtplf.html.\r\n"); flush(); _exit(1); }
- 
- void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
+   if (r <= 0)
+   {
+@@ -120,11 +136,21 @@ void err_bmf()
+   enew(); eout("Sender address in badmailfrom\n"); eflush();
+   out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n");
+ }
 +#ifndef TLS
- void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
+ void err_nogateway()
+ {
+   enew(); eout("Recipient domain not in rcpthosts <"); eoutclean(addr.s); eout(">\n"); eflush();
+   out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n");
+ }
 +#else
 +void err_nogateway()
 +{
++  enew(); eout("Recipient domain not in rcpthosts <"); eoutclean(addr.s); eout(">\n"); eflush();
 +  out("553 sorry, that domain isn't in my list of allowed rcpthosts");
 +  tls_nogateway();
 +  out(" (#5.7.1)\r\n");
 +}
 +#endif
- void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
- void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
- void err_wantmail() { out("503 MAIL first (#5.5.1)\r\n"); }
-@@ -131,6 +158,11 @@ void setup()
-   if (!remotehost) remotehost = "unknown";
-   remoteinfo = env_get("TCPREMOTEINFO");
-   relayclient = env_get("RELAYCLIENT");
+ void err_unimpl(arg) char *arg;
+ {
+   enew(); eout("Unimplemented command\n"); eflush();
+@@ -358,7 +384,13 @@ void setup()
+     else
+       if ((*verify == 'D') || (*verify == 'd')) verifydefer=1;
+   }
 +
 +#ifdef TLS
 +  if (env_get("SMTPS")) { smtps = 1; tls_init(); }
 +  else
 +#endif
    dohelo(remotehost);
++
+   enew(); eout("New session\n"); eflush();
  }
  
-@@ -213,6 +245,9 @@ int addrallowed()
+@@ -438,6 +470,9 @@ int addrallowed()
    int r;
    r = rcpthosts(addr.s,str_len(addr.s));
    if (r == -1) die_control();
@@ -952,27 +955,36 @@ index 54df00c..17e2754 100644
    return r;
  }
  
-@@ -227,9 +262,18 @@ void smtp_helo(arg) char *arg;
+@@ -549,13 +584,26 @@ void smtp_helo(arg) char *arg;
    smtp_greet("250 "); out("\r\n");
    seenmail = 0; dohelo(arg);
  }
 +/* ESMTP extensions are published here */
  void smtp_ehlo(arg) char *arg;
  {
--  smtp_greet("250-"); out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
+   enew(); eout("Received EHLO "); eoutclean(arg); eout("\n"); eflush();
+   char size[FMT_ULONG];
+   size[fmt_ulong(size,(unsigned int) databytes)] = 0;
+-  smtp_greet("250-"); 
+-  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
++
 +#ifdef TLS
 +  struct stat st;
 +#endif
++
 +  smtp_greet("250-");
++
 +#ifdef TLS
 +  if (!ssl && (stat("control/servercert.pem",&st) == 0))
 +    out("\r\n250-STARTTLS");
 +#endif
++
 +  out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
-   seenmail = 0; dohelo(arg);
- }
- void smtp_rset(arg) char *arg;
-@@ -269,6 +313,11 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
++
+   if (smtpauth == 1 || smtpauth == 11) out("250-AUTH LOGIN PLAIN\r\n");
+   if (smtpauth == 2 || smtpauth == 12) out("250-AUTH CRAM-MD5\r\n");
+   if (smtpauth == 3 || smtpauth == 13) out("250-AUTH LOGIN PLAIN CRAM-MD5\r\n");
+@@ -620,6 +668,11 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
  {
    int r;
    flush();
@@ -984,7 +996,7 @@ index 54df00c..17e2754 100644
    r = timeoutread(timeout,fd,buf,len);
    if (r == -1) if (errno == error_timeout) die_alarm();
    if (r <= 0) die_read();
-@@ -277,6 +326,9 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
+@@ -628,6 +681,9 @@ int saferead(fd,buf,len) int fd; char *buf; int len;
  
  char ssinbuf[1024];
  substdio ssin = SUBSTDIO_FDBUF(saferead,0,ssinbuf,sizeof ssinbuf);
@@ -994,18 +1006,9 @@ index 54df00c..17e2754 100644
  
  struct qmail qqt;
  unsigned int bytestooverflow = 0;
-@@ -378,7 +430,7 @@ void smtp_data(arg) char *arg; {
-   qp = qmail_qp(&qqt);
-   out("354 go ahead\r\n");
-  
--  received(&qqt,"SMTP",local,remoteip,remotehost,remoteinfo,fakehelo);
-+  received(&qqt,protocol,local,remoteip,remotehost,remoteinfo,fakehelo);
-   blast(&hops);
-   hops = (hops >= MAXHOPS);
-   if (hops) qmail_fail(&qqt);
-@@ -394,6 +446,242 @@ void smtp_data(arg) char *arg; {
-   out("\r\n");
- }
+@@ -969,6 +1025,242 @@ void smtp_auth(arg)
+ 
+ /* this file is too long --------------------------------------------- GO ON */
  
 +#ifdef TLS
 +stralloc proto = {0};
@@ -1246,7 +1249,7 @@ index 54df00c..17e2754 100644
  struct commands smtpcommands[] = {
    { "rcpt", smtp_rcpt, 0 }
  , { "mail", smtp_mail, 0 }
-@@ -403,6 +691,9 @@ struct commands smtpcommands[] = {
+@@ -979,6 +1271,9 @@ struct commands smtpcommands[] = {
  , { "ehlo", smtp_ehlo, flush }
  , { "rset", smtp_rset, 0 }
  , { "help", smtp_help, flush }
@@ -1255,11 +1258,10 @@ index 54df00c..17e2754 100644
 +#endif
  , { "noop", err_noop, flush }
  , { "vrfy", err_vrfy, flush }
- , { 0, err_unimpl, flush }
+ , { 0, err_unrecog, flush }
 diff --git a/ssl_timeoutio.c b/ssl_timeoutio.c
-new file mode 100644
-index 0000000..5b2dc9d
---- /dev/null
+index e69de29..5b2dc9d 100644
+--- a/ssl_timeoutio.c
 +++ b/ssl_timeoutio.c
 @@ -0,0 +1,95 @@
 +#include "select.h"
@@ -1358,9 +1360,8 @@ index 0000000..5b2dc9d
 +  return ssl_timeoutio(SSL_write, t, rfd, wfd, ssl, buf, len);
 +}
 diff --git a/ssl_timeoutio.h b/ssl_timeoutio.h
-new file mode 100644
-index 0000000..073cb67
---- /dev/null
+index e69de29..073cb67 100644
+--- a/ssl_timeoutio.h
 +++ b/ssl_timeoutio.h
 @@ -0,0 +1,21 @@
 +#ifndef SSL_TIMEOUTIO_H
@@ -1385,9 +1386,8 @@ index 0000000..073cb67
 +
 +#endif
 diff --git a/tls.c b/tls.c
-new file mode 100644
-index 0000000..aed5d57
---- /dev/null
+index e69de29..aed5d57 100644
+--- a/tls.c
 +++ b/tls.c
 @@ -0,0 +1,25 @@
 +#include "exit.h"
@@ -1416,9 +1416,8 @@ index 0000000..aed5d57
 +  return (errno == error_timeout) ? "timed out" : error_str(errno);
 +}
 diff --git a/tls.h b/tls.h
-new file mode 100644
-index 0000000..a4650af
---- /dev/null
+index e69de29..a4650af 100644
+--- a/tls.h
 +++ b/tls.h
 @@ -0,0 +1,16 @@
 +#ifndef TLS_H
@@ -1438,9 +1437,8 @@ index 0000000..a4650af
 +
 +#endif
 diff --git a/update_tmprsadh.sh b/update_tmprsadh.sh
-new file mode 100644
-index 0000000..beab94f
---- /dev/null
+index e69de29..beab94f 100644
+--- a/update_tmprsadh.sh
 +++ b/update_tmprsadh.sh
 @@ -0,0 +1,19 @@
 +#!/bin/sh
