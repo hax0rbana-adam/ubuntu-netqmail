@@ -979,7 +979,7 @@ index 797a188..9d73cb8 100644
 +    out("\r\n250-STARTTLS");
 +#endif
 +
-+  out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
++  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
 +
    if (smtpauth == 1 || smtpauth == 11) out("250-AUTH LOGIN PLAIN\r\n");
    if (smtpauth == 2 || smtpauth == 12) out("250-AUTH CRAM-MD5\r\n");
