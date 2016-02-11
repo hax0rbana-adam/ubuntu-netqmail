@@ -1,3 +1,9 @@
+netqmail (1.06-5.7) trusty; urgency=low
+
+  * add tls patch
+
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 11 Feb 2016 01:59:32 +0000
+
 netqmail (1.06-5.6) trusty; urgency=low
 
   * add recipient verification patch
