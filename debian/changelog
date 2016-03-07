@@ -1,3 +1,9 @@
+netqmail (1.06-5.9) trusty; urgency=low
+
+  * add update_tmprsadh cron.d file
+
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 19:45:21 +0000
+
 netqmail (1.06-5.8) trusty; urgency=low
 
   * fix ESMTP header declarations

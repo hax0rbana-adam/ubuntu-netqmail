@@ -106,6 +106,7 @@ binary-arch: install-arch qmail.deb
 	dpkg-gencontrol -isp -pqmail -P'$(DIR)'
 	dpkg -b '$(DIR)' ..
 binary-indep: install-indep qmail-uids-gids.deb
+	dh_installcron --tmpdir='$(DIR)' --package=qmail
 	dpkg-gencontrol -isp -pqmail-uids-gids -P'$(DIR)'-uids-gids
 	dpkg -b '$(DIR)'-uids-gids ..
 
