@@ -8,7 +8,7 @@ Standards-Version: 3.9.3.1
 
 Package: qmail
 Architecture: any
-Depends: ${shlibs:Depends}, qmail-uids-gids (>> 1.06)
+Depends: ${shlibs:Depends}, qmail-uids-gids (>> 1.06), ${misc:Depends}
 Recommends: qmail-run (>= 2.0.0)
 Suggests: fastforward, dot-forward, qmail-tools
 Description: a secure, reliable, efficient, simple message transfer agent
@@ -22,6 +22,6 @@ Description: a secure, reliable, efficient, simple message transfer agent
 
 Package: qmail-uids-gids
 Architecture: all
-Depends: passwd, adduser
+Depends: passwd, adduser, ${misc:Depends}
 Description: user ids and group ids for qmail
  This package is mandatory for building and running the qmail package.
