@@ -102,11 +102,11 @@ install-indep: deb-checkdir deb-checkuid
 
 binary: binary-indep binary-arch
 binary-arch: install-arch qmail.deb
+	dh_installcron --tmpdir='$(DIR)' --package=qmail
 	dpkg-shlibdeps '$(DIR)'/usr/bin/* '$(DIR)'/usr/sbin/*
 	dpkg-gencontrol -isp -pqmail -P'$(DIR)'
 	dpkg -b '$(DIR)' ..
 binary-indep: install-indep qmail-uids-gids.deb
-	dh_installcron --tmpdir='$(DIR)' --package=qmail
 	dpkg-gencontrol -isp -pqmail-uids-gids -P'$(DIR)'-uids-gids
 	dpkg -b '$(DIR)'-uids-gids ..
 
