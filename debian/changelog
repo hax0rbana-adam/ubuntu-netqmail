@@ -1,3 +1,7 @@
+netqmail (1.06-5.13) xenial; urgency=low
+
+  * bump version for xenial build
+
 netqmail (1.06-5.12) xenial; urgency=low
 
   * add QMAILREMOTE environmental variable support
