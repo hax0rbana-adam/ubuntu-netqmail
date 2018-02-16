@@ -1,70 +1,70 @@
-netqmail (1.06-5.12) trusty; urgency=low
+netqmail (1.06-5.12) xenial; urgency=low
 
   * add QMAILREMOTE environmental variable support
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
 
-netqmail (1.06-5.11) trusty; urgency=low
+netqmail (1.06-5.11) xenial; urgency=low
 
   * move cron job under architecture build
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 22:17:55 +0000
 
-netqmail (1.06-5.10) trusty; urgency=low
+netqmail (1.06-5.10) xenial; urgency=low
 
   * bump version
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 21:54:38 +0000
 
-netqmail (1.06-5.9) trusty; urgency=low
+netqmail (1.06-5.9) xenial; urgency=low
 
   * add update_tmprsadh cron.d file
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 19:45:21 +0000
 
-netqmail (1.06-5.8) trusty; urgency=low
+netqmail (1.06-5.8) xenial; urgency=low
 
   * fix ESMTP header declarations
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 11 Feb 2016 20:40:08 +0000
 
-netqmail (1.06-5.7) trusty; urgency=low
+netqmail (1.06-5.7) xenial; urgency=low
 
   * add tls patch
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 11 Feb 2016 01:59:32 +0000
 
-netqmail (1.06-5.6) trusty; urgency=low
+netqmail (1.06-5.6) xenial; urgency=low
 
   * add recipient verification patch
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Fri, 13 Mar 2015 02:48:44 +0000
 
-netqmail (1.06-5.5) trusty; urgency=low
+netqmail (1.06-5.5) xenial; urgency=low
 
   * fix duplicate line during merge
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 22:07:01 +0000
 
-netqmail (1.06-5.4) trusty; urgency=low
+netqmail (1.06-5.4) xenial; urgency=low
 
   * wrong patch file format
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 18:46:59 +0000
 
-netqmail (1.06-5.3) trusty; urgency=low
+netqmail (1.06-5.3) xenial; urgency=low
 
   * fix more packaging issues
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 18:46:58 +0000
 
-netqmail (1.06-5.2) trusty; urgency=low
+netqmail (1.06-5.2) xenial; urgency=low
 
   * fix packaging issues
 
  -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 16:46:57 +0000
 
-netqmail (1.06-5.1) trusty; urgency=low
+netqmail (1.06-5.1) xenial; urgency=low
 
   * apply the following additional patches
   * handle-large-dns-responses.patch
