@@ -1,0 +1,51 @@
+diff --git a/Makefile b/Makefile
+index 4947b9c..9d5ebfc 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1482,11 +1482,11 @@ tcpto.h readwrite.h timeoutconn.h timeoutread.h timeoutwrite.h
+ 
+ qmail-rspawn: \
+ load qmail-rspawn.o spawn.o tcpto_clean.o now.o coe.o sig.a open.a \
+-seek.a lock.a wait.a fd.a stralloc.a alloc.a substdio.a error.a str.a \
++seek.a lock.a wait.a fd.a stralloc.a alloc.a substdio.a error.a env.a str.a \
+ auto_qmail.o auto_uids.o auto_spawn.o
+ 	./load qmail-rspawn spawn.o tcpto_clean.o now.o coe.o \
+ 	sig.a open.a seek.a lock.a wait.a fd.a stralloc.a alloc.a \
+-	substdio.a error.a str.a auto_qmail.o auto_uids.o \
++	substdio.a error.a env.a str.a auto_qmail.o auto_uids.o \
+ 	auto_spawn.o 
+ 
+ qmail-rspawn.0: \
+diff --git a/qmail-rspawn.c b/qmail-rspawn.c
+index 9d838e6..5d9c8c5 100644
+--- a/qmail-rspawn.c
++++ b/qmail-rspawn.c
+@@ -5,12 +5,19 @@
+ #include "fork.h"
+ #include "error.h"
+ #include "tcpto.h"
++#include "env.h"
++
++char *qmail_remote = "qmail-remote";
+ 
+ void initialize(argc,argv)
+ int argc;
+ char **argv;
+ {
++ char *qr;
++
+  tcpto_clean();
++ qr = env_get("QMAILREMOTE");
++ if (qr && *qr) qmail_remote = qr;
+ }
+ 
+ int truncreport = 0;
+@@ -84,7 +91,7 @@ char *s; char *r; int at;
+  int f;
+  char *(args[5]);
+ 
+- args[0] = "qmail-remote";
++ args[0] = qmail_remote;
+  args[1] = r + at + 1;
+  args[2] = s;
+  args[3] = r;
