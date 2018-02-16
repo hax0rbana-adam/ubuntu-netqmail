@@ -1,6 +1,14 @@
+netqmail (1.06-5.14) xenial; urgency=low
+
+  * missing date field in changelog
+
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
+
 netqmail (1.06-5.13) xenial; urgency=low
 
   * bump version for xenial build
+
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
 
 netqmail (1.06-5.12) xenial; urgency=low
 
