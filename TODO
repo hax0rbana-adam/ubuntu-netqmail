@@ -21,3 +21,4 @@ eliminate token822, headerbody, hfield
 replace INTERNALS and THOUGHTS with a real paper describing qmail
 handle IPv6
 rewrite everything from scratch
+test
