@@ -14,6 +14,8 @@ patch-stamp:
 	done
 	touch patch-stamp
 
+build-arch: build
+build-indep: build
 build: deb-checkdir build-stamp
 build-stamp: patch-stamp
 	test -r conf-qmail'{orig}' || cp conf-qmail conf-qmail'{orig}'
@@ -110,6 +112,6 @@ binary-indep: install-indep qmail-uids-gids.deb
 	dpkg-gencontrol -isp -pqmail-uids-gids -P'$(DIR)'-uids-gids
 	dpkg -b '$(DIR)'-uids-gids ..
 
-.PHONY: patch build clean install binary-indep binary-arch binary
+.PHONY: patch build build-arch build-indep clean install binary-indep binary-arch binary
 
 include debian/implicit

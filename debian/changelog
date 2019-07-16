@@ -1,83 +1,14 @@
-netqmail (1.06-5.14) xenial; urgency=low
+netqmail (1.06-5.15) bionic; urgency=low
 
-  * missing date field in changelog
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
-
-netqmail (1.06-5.13) xenial; urgency=low
-
-  * bump version for xenial build
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
-
-netqmail (1.06-5.12) xenial; urgency=low
-
+  * build for bionic
+  * squashing previous commits:
   * add QMAILREMOTE environmental variable support
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Wed, 03 Aug 2016 10:41:27 +0000
-
-netqmail (1.06-5.11) xenial; urgency=low
-
   * move cron job under architecture build
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 22:17:55 +0000
-
-netqmail (1.06-5.10) xenial; urgency=low
-
-  * bump version
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 21:54:38 +0000
-
-netqmail (1.06-5.9) xenial; urgency=low
-
   * add update_tmprsadh cron.d file
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Mon, 07 Mar 2016 19:45:21 +0000
-
-netqmail (1.06-5.8) xenial; urgency=low
-
   * fix ESMTP header declarations
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 11 Feb 2016 20:40:08 +0000
-
-netqmail (1.06-5.7) xenial; urgency=low
-
   * add tls patch
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 11 Feb 2016 01:59:32 +0000
-
-netqmail (1.06-5.6) xenial; urgency=low
-
   * add recipient verification patch
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Fri, 13 Mar 2015 02:48:44 +0000
-
-netqmail (1.06-5.5) xenial; urgency=low
-
   * fix duplicate line during merge
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 22:07:01 +0000
-
-netqmail (1.06-5.4) xenial; urgency=low
-
-  * wrong patch file format
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 18:46:59 +0000
-
-netqmail (1.06-5.3) xenial; urgency=low
-
-  * fix more packaging issues
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 18:46:58 +0000
-
-netqmail (1.06-5.2) xenial; urgency=low
-
-  * fix packaging issues
-
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 16:46:57 +0000
-
-netqmail (1.06-5.1) xenial; urgency=low
-
   * apply the following additional patches
   * handle-large-dns-responses.patch
   * qmail-authentication-0.8.2
@@ -85,7 +16,14 @@ netqmail (1.06-5.1) xenial; urgency=low
   * smtpd-502-to-500.patch
   * smtpd-relay-reject.patch
 
- -- Ryan Buterbaugh <ryan@buterbaugh.org>  Thu, 12 Mar 2015 16:46:56 +0000
+ -- Ryan Buterbaugh <ryan@buterbaugh.org>  Tue, 16 Jul 2019 14:41:56 +0000
+
+netqmail (1.06-6) unstable; urgency=low
+
+  * debian/rules: do not FTBFS with dpkg-buildpackage -A (thx Santiago
+    Vila; closes: #831963).
+
+ -- Gerrit Pape <pape@smarden.org>  Wed, 21 Sep 2016 08:58:41 +0000
 
 netqmail (1.06-5) unstable; urgency=low
 
