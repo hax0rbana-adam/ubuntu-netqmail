@@ -1,0 +1,29 @@
+bullseye:
+  stage: build
+  tags: [ docker ]
+  image: debian:bullseye
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
+  artifacts:
+    paths:
+      - *.deb
+
+buster:
+  stage: build
+  tags: [ docker ]
+  image: debian:buster
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  rules:
+    - if: '$CI_COMMIT_BRANCH != "openssl1.1"'
+  artifacts:
+    paths:
+      - *.deb
