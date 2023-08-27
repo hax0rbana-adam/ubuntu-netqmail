@@ -474,7 +474,7 @@ index ddc7317..62562fd 100644
  {
 +#ifdef TLS
 +  /* shouldn't talk to the client unless in an appropriate state */
-+  int state = SSL_get_state(ssl);
++  int state = ssl && SSL_get_state(ssl);
 +  if (state & TLS_ST_OK || (!smtps && state & TLS_ST_BEFORE))
 +#endif
    substdio_putsflush(&smtpto,"QUIT\r\n");
