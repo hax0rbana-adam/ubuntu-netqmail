@@ -1,3 +1,9 @@
+netqmail (1.06-6.2) bullseye; urgency=low
+
+  * Fixed TLS patch to not segfault when sending email to a server without TLS
+
+ -- Adam <adam@hax0rbana.org>  Sun, 27 Aug 2023 00:37:18 -0500
+
 netqmail (1.06-6.1) bionic; urgency=low
 
   * pin libssl dependency
