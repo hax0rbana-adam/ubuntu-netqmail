@@ -5,13 +5,14 @@ bullseye:
   script:
     - DEBIAN_FRONTEND=noninteractive apt-get update
     - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - ./debian/make_users.sh
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
   rules:
     - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
   artifacts:
     paths:
-      - *.deb
+      - ./*.deb
 
 buster:
   stage: build
@@ -19,11 +20,11 @@ buster:
   image: debian:buster
   script:
     - DEBIAN_FRONTEND=noninteractive apt-get update
-    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev qmail-uids-gids
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
   rules:
     - if: '$CI_COMMIT_BRANCH != "openssl1.1"'
   artifacts:
     paths:
-      - *.deb
+      - ./*.deb
