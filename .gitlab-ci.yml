@@ -8,8 +8,6 @@ bullseye:
     - ./debian/make_users.sh
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
   artifacts:
     paths:
       - ./*.deb
@@ -20,9 +18,11 @@ buster:
   image: debian:buster
   script:
     - DEBIAN_FRONTEND=noninteractive apt-get update
+    # Buster was the only Debian release that included the qmail-uids-gids package
     - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev qmail-uids-gids
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
+  # Buster uses openssl 1.0, so we don't want to run this on the openssl1.1 branch
   rules:
     - if: '$CI_COMMIT_BRANCH != "openssl1.1"'
   artifacts:
