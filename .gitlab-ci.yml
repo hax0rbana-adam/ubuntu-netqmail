@@ -8,6 +8,9 @@ bullseye:
     - ./debian/make_users.sh
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
+  # Bullseye upgraded to OpenSSL 1.1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
   artifacts:
     paths:
       - ./*.deb
@@ -22,9 +25,26 @@ buster:
     - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev qmail-uids-gids
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
-  # Buster uses openssl 1.0, so we don't want to run this on the openssl1.1 branch
+  # Buster uses OpenSSL 1.0, so we only want to build that branch on buster
   rules:
-    - if: '$CI_COMMIT_BRANCH != "openssl1.1"'
+    - if: '$CI_COMMIT_BRANCH == "openssl1.0"'
+  artifacts:
+    paths:
+      - ./*.deb
+
+focal:
+  stage: build
+  tags: [ docker ]
+  image:
+    name: ubuntu:focal
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian qmail-uids-gids debhelper libssl-dev
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  # Focal used OpenSSL 1.0
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "openssl1.0"'
   artifacts:
     paths:
       - ./*.deb
