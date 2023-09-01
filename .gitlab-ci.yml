@@ -1,3 +1,17 @@
+bookworm:
+  stage: build
+  tags: [ docker ]
+  image: debian:bookworm
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - ./debian/make_users.sh
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  artifacts:
+    paths:
+      - ./*.deb
+
 bullseye:
   stage: build
   tags: [ docker ]
