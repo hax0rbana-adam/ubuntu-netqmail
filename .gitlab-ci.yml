@@ -25,9 +25,9 @@ buster:
     - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev qmail-uids-gids
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
-  # Buster uses OpenSSL 1.0, so we only want to build that branch on buster
+  # Buster uses OpenSSL 1.1
   rules:
-    - if: '$CI_COMMIT_BRANCH == "openssl1.0"'
+    - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
   artifacts:
     paths:
       - ./*.deb
@@ -44,7 +44,7 @@ focal:
     - mv ../*.deb .
   # Focal used OpenSSL 1.0
   rules:
-    - if: '$CI_COMMIT_BRANCH == "openssl1.0"'
+    - if: '$CI_COMMIT_BRANCH == "openssl1.1"'
   artifacts:
     paths:
       - ./*.deb
