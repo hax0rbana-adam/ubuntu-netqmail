@@ -47,7 +47,53 @@ focal:
     name: ubuntu:focal
   script:
     - DEBIAN_FRONTEND=noninteractive apt-get update
+    # Focal was the only Ubuntu release that included the qmail-uids-gids package
     - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian qmail-uids-gids debhelper libssl-dev
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  artifacts:
+    paths:
+      - ./*.deb
+
+jammy:
+  stage: build
+  tags: [ docker ]
+  image:
+    name: ubuntu:jammy
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - ./debian/make_users.sh
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  artifacts:
+    paths:
+      - ./*.deb
+
+kinetic:
+  stage: build
+  tags: [ docker ]
+  image:
+    name: ubuntu:kinetic
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - ./debian/make_users.sh
+    - dpkg-buildpackage --no-sign
+    - mv ../*.deb .
+  artifacts:
+    paths:
+      - ./*.deb
+
+lunar:
+  stage: build
+  tags: [ docker ]
+  image:
+    name: ubuntu:lunar
+  script:
+    - DEBIAN_FRONTEND=noninteractive apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -y install devscripts build-essential lintian debhelper libssl-dev
+    - ./debian/make_users.sh
     - dpkg-buildpackage --no-sign
     - mv ../*.deb .
   artifacts:
