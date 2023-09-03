@@ -10,9 +10,17 @@ D. J. Bernstein did not participate in, nor has he been asked to
 approve of this distribution.
 
 With this distribution, we thank Daniel Bernstein for his dedication
-of qmail to the public domain.  We have taken advantage of this event
-to remove the need to apply a patch.  We will distribute a Netqmail 1.07
-shortly which includes enhancements.
+of qmail to the public domain.
+
+The official location of this repo is at:
+https://gitlab.hax0rbana.org/public-repos/ubuntu-netqmail/
+
+There's a mirror at:
+https://github.com/hax0rbana-adam/ubuntu-netqmail
+
+Issues can be filed at either location.
+
+---
 
 Netqmail 1.06 is produced by this motley krewe:
 
